@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "harvest-mcp",
+  "version": "0.1.0",
+  "description": "Connect Harvest time tracking through Harvest's official remote MCP. Skills for timers, time entries, projects/clients/tasks, team assignments, expenses, and draft invoices. OAuth via Harvest — no personal access tokens in config.",
+  "author": {
+    "name": "M2 AV Consulting, LLC",
+    "email": "support@m2avc.com"
+  },
+  "homepage": "https://support.getharvest.com/hc/en-us/articles/46293697226381-Harvest-MCP",
+  "repository": "https://github.com/m2avc/harvest-mcp",
+  "license": "MIT",
+  "keywords": ["harvest", "time-tracking", "mcp", "invoicing", "timers", "expenses"]
+}
