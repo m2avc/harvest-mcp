@@ -1,5 +1,7 @@
 # harvest-mcp
 
+![harvest-mcp](assets/logo.svg)
+
 Agent Plugin that connects [Harvest](https://www.getharvest.com/) through **Harvest’s official remote MCP** at `https://api.harvestapp.com/mcp` (`streamable-http`).
 
 This package does **not** reimplement the Harvest REST API. It points Cursor / Agent hosts at Harvest’s hosted MCP and ships public-safe skills so agents cover **all official Harvest MCP tools (35)**.
