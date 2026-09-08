@@ -56,6 +56,21 @@ describe("create_invoice_message", () => {
     }
   });
 
+  it("blocks email (omit event_type) unless DANGEROUS_SEND=1", async () => {
+    const { client, requests } = createMockClient({
+      responseBody: { id: 1, event_type: null },
+    });
+    const input = createInvoiceMessageInputSchema.parse({
+      invoice_id: 13150403,
+      recipients: [{ name: "Richard Roe", email: "richard@example.com" }],
+    });
+    await assert.rejects(
+      () => createInvoiceMessage(client, input, {}),
+      (error: unknown) => error instanceof DangerousSendBlockedError,
+    );
+    assert.equal(requests.length, 0);
+  });
+
   it("emails the invoice when event_type is omitted, recipients are present, and DANGEROUS_SEND=1 (mocked)", async () => {
     const { client, requests } = createMockClient({
       responseBody: { id: 27835324, event_type: null, subject: "Invoice #1001" },

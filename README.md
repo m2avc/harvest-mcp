@@ -114,8 +114,9 @@ See `skills/use-harvest-mcp/SKILL.md` and `servers/harvest-rest/COS-RUNBOOK.md`.
 
 ## Auth
 
-- Official remote MCP: OAuth through the MCP host.
-- `harvest-rest`: `HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` + `User-Agent` header. Never commit tokens or Account IDs.
+- Official remote MCP: **OAuth** through the MCP host (preferred day-to-day; least privilege is whatever Harvest ID grants that user/app).
+- `harvest-rest`: PAT or OAuth access token via **host env** only (`HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` + `User-Agent`). Prefer a PAT limited to the account you intend to use. Never commit tokens or Account IDs. Never log them.
+- **Mike human GO** is required before Marketplace publish or a public version tag. See `servers/harvest-rest/COS-RUNBOOK.md` and `.github/PULL_REQUEST_TEMPLATE.md`.
 
 ## Harvest API v2 headers and rate limits
 

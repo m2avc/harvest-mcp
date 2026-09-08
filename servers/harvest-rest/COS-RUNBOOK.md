@@ -2,11 +2,9 @@
 
 Keep PRs **draft** until Harvest CoS smoke passes. Never email a real client invoice. Never `event_type=send` on a live client invoice without **Mike GO**.
 
-**Stacked PR #2 live bar (unchanged):** list rates / verify **Chad $145**, then **Arabella** assignment rates. Do not invent last names, project names, or client names.
+**Mike human GO is required before Marketplace publish or a public version tag.** CoS smoke is not a publish.
 
-Sister PR #1 invoice bar (same server, later or separately): throwaway draft + `update_invoice` + `create_invoice_payment` notes. Not required to merge rates.
-
-This compliance PR is **client reliability + gap matrix only**. It does not add domain tools. Do not undraft #1/#2 from here.
+This plugin is world-shared. Tokens never go in committed `mcp.json`. `DANGEROUS_SEND` stays unset unless Mike has GO'd a live send.
 
 ## Official API v2 client rules
 
@@ -22,6 +20,12 @@ Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/g
 - Pagination: use `links` in the JSON; do not invent `page`/`cursor` URLs. Invalid `per_page` → `422`.
 
 Full endpoint vs tool map: [`docs/API_V2_GAP_MATRIX.md`](../../docs/API_V2_GAP_MATRIX.md).
+
+## Auth: PAT vs OAuth (least privilege)
+
+- Official remote MCP (`https://api.harvestapp.com/mcp`): **OAuth** through the host. Prefer this for day-to-day agent use. Scope is whatever Harvest ID grants the OAuth app / user.
+- `harvest-rest`: **PAT or OAuth access token** in the **host** environment only (`HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID`). Prefer a PAT limited to the M2 account you intend to smoke — not a production customer token pasted into chat or `mcp.json`.
+- Never log tokens, Account IDs, or `Authorization` headers. Never commit them.
 
 ## Environment
 
@@ -51,7 +55,7 @@ export HARVEST_USER_AGENT="harvest-cos-smoke (you@example.com)"
 node dist/index.js
 ```
 
-Unit tests (no Harvest, no email):
+Unit tests (no Harvest, no email) — also run on every PR via `.github/workflows/ci.yml`:
 
 ```bash
 cd servers/harvest-rest && npm test
@@ -59,7 +63,7 @@ cd servers/harvest-rest && npm test
 
 ## Connect in Cursor (Harvest CoS)
 
-1. Official remote MCP (`harvest`) stays at `https://api.harvestapp.com/mcp` — complete Harvest OAuth in the host. Use it to **create a throwaway draft** (`create_invoice` / `create_invoice_from_tracked_time`) on a test client, not a live client job.
+1. Official remote MCP (`harvest`) stays at `https://api.harvestapp.com/mcp` — complete Harvest OAuth in the host. Use it to **create a throwaway draft** (`create_invoice` / `create_invoice_from_tracked_time`) on an **M2 internal client**, not a live client job.
 2. `harvest-rest` is declared in plugin `mcp.json` as:
 
    ```json
@@ -75,56 +79,35 @@ cd servers/harvest-rest && npm test
    - Cursor Settings → MCP → `harvest-rest` → environment: `HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `HARVEST_USER_AGENT`
    - or a **user-local** `~/.cursor/mcp.json` (never commit) with the same `env` keys and `command`/`args` pointing at this repo’s `servers/harvest-rest/dist/index.js`
    - or launch Cursor from a shell that already exported those variables (host may inherit them)
-5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include `list_user_billable_rates`, `get_user_billable_rate`, `create_user_billable_rate`, `update_project_user_assignment` plus the invoice tools from PR #1. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
+5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include invoice + rate tools. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
 
 Leave `DANGEROUS_SEND` unset.
 
-## Suggested CoS smoke — rates (this PR)
+## Live CoS smoke — required before merge of release-affecting tools / before publish
 
-Read-only. First names only as Harvest already used. Do **not** send invoices or client emails.
+Run these **through harvest-rest MCP tools in Cursor**, not only raw REST/curl. That is the Marketplace path.
 
-### 1. Chad — default billable rate $145
+Preconditions:
 
-1. Official `list_users` → find **Chad** → note `user_id`.
-2. harvest-rest `list_user_billable_rates` `{ "user_id": <chad> }`.
-3. Pass: the current rate (`end_date` null) `amount` is **145**.
+- **Throwaway draft only** on an **M2 internal client** (create via official `create_invoice` if needed). Confirm `state` is `draft` via official `get_invoice`.
+- `DANGEROUS_SEND` **unset**. No client email. No `event_type=send`. No `send_thank_you=true`.
+- Do not invent last names, project names, or client names.
 
-Minimal tool call:
+### 1. `update_invoice` — multi-line notes (MCP)
 
-```json
-{
-  "name": "list_user_billable_rates",
-  "arguments": { "user_id": 0 }
-}
-```
-
-Replace `0` with Chad’s id. Do not invent the id.
-
-### 2. Arabella — assignment rates
-
-1. Official `list_users` → find **Arabella**.
-2. Official `list_project_assignments` (and harvest-rest `update_project_user_assignment` only if you must change a rate).
-3. Report `uses_default_rate` / `use_default_rates` and `hourly_rate` / `billable_rate` as returned. Do not invent project or client names.
-
-## Smoke examples — invoices (sister PR #1, throwaway draft only)
-
-Use a draft created for this test. Confirm `state` is `draft` via official `get_invoice`. Do not use a sent/open client invoice.
-
-### 1. `update_invoice`
+Call harvest-rest `update_invoice` with this **exact** `notes` string (leading spaces, newline, tab). Do not trim.
 
 ```json
 {
   "invoice_id": 0,
-  "purchase_order": "cos-smoke-po",
-  "subject": "COS smoke throwaway — delete after"
+  "subject": "COS smoke throwaway — delete after",
+  "notes": "  COS smoke — keep  verbatim\n\t#ref  "
 }
 ```
 
-Replace `0` with the throwaway draft id. Expected: `200` invoice JSON with those header fields. Line-item create/update/`_destroy` may be exercised on the same throwaway draft only.
+Replace `0` with the throwaway draft id. Pass: response `notes` equals that string character-for-character.
 
-### 2. `create_invoice_payment` — notes verbatim
-
-Use this **exact** notes string (leading spaces, newline, tab). Do not trim or rewrite.
+### 2. `create_invoice_payment` notes + delete (MCP)
 
 ```json
 {
@@ -136,9 +119,16 @@ Use this **exact** notes string (leading spaces, newline, tab). Do not trim or r
 }
 ```
 
-Pass: response `notes` equals that string character-for-character (`list_invoice_payments` must show the same). This server forces `send_thank_you=false` unless `DANGEROUS_SEND=1`.
+Pass: payment `notes` match character-for-character (`list_invoice_payments` must show the same). Then `delete_invoice_payment`. Delete the throwaway draft if you created it for the smoke.
 
-Cleanup: `delete_invoice_payment`, then `delete_invoice` on the throwaway draft if you created it for the smoke.
+### 3. Rates — read-only when rates tools change
+
+When the PR touches billable rates, cost rates, or assignment rates:
+
+1. Official `list_users` → **Chad** → harvest-rest `list_user_billable_rates`. Pass: current rate (`end_date` null) `amount` is **145**.
+2. Official `list_users` → **Arabella** → official `list_project_assignments`. Report `uses_default_rate` / `hourly_rate` as returned.
+
+Do not invent ids.
 
 ### Do not call in smoke
 
@@ -146,4 +136,8 @@ Cleanup: `delete_invoice_payment`, then `delete_invoice` on the throwaway draft 
 - `create_invoice_message` with `event_type=send` (marks sent; Mike GO only)
 - `create_invoice_payment` with `send_thank_you=true`
 
-Those send paths are unit/mocked in `npm test`. Live send stays behind `DANGEROUS_SEND=1` + Mike GO.
+Those send paths are unit/mocked in CI `npm test`. Live send stays behind `DANGEROUS_SEND=1` + Mike GO.
+
+## Marketplace publish
+
+CI + CoS smoke are necessary, not sufficient. **Mike human GO** is required before a Marketplace publish or a public version tag.

@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  harvest-rest:
+    name: harvest-rest unit tests + public-safe scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: servers/harvest-rest/package-lock.json
+
+      - name: Install
+        working-directory: servers/harvest-rest
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: servers/harvest-rest
+        run: npm run typecheck
+
+      - name: Unit tests
+        working-directory: servers/harvest-rest
+        env:
+          # Never enable send paths in CI. Live invoice email is Mike-GO only.
+          DANGEROUS_SEND: ""
+        run: npm test
+
+      - name: Public-safe scan (no committed secrets)
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          mcp = json.loads(Path("mcp.json").read_text())
+          blob = json.dumps(mcp)
+          if "HARVEST_ACCESS_TOKEN" in blob or "access_token" in blob.lower():
+              raise SystemExit("mcp.json must not contain tokens")
+
+          env = Path("servers/harvest-rest/.env.example").read_text()
+          for line in env.splitlines():
+              if line.startswith("HARVEST_ACCESS_TOKEN=") and line.split("=", 1)[1].strip():
+                  raise SystemExit(".env.example must leave HARVEST_ACCESS_TOKEN empty")
+              if line.startswith("HARVEST_ACCOUNT_ID=") and line.split("=", 1)[1].strip():
+                  raise SystemExit(".env.example must leave HARVEST_ACCOUNT_ID empty")
+          print("mcp.json and .env.example are placeholder-only")
+          PY
