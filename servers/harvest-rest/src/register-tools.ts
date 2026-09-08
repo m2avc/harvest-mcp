@@ -29,6 +29,22 @@ import {
   listUserBillableRates,
   listUserBillableRatesInputSchema,
 } from "./tools/billable-rates.js";
+import {
+  createUserCostRate,
+  createUserCostRateInputSchema,
+  getUserCostRate,
+  getUserCostRateInputSchema,
+  listUserCostRates,
+  listUserCostRatesInputSchema,
+} from "./tools/cost-rates.js";
+import {
+  createInvoiceItemCategory,
+  createInvoiceItemCategoryInputSchema,
+  getInvoiceItemCategory,
+  getInvoiceItemCategoryInputSchema,
+  listInvoiceItemCategories,
+  listInvoiceItemCategoriesInputSchema,
+} from "./tools/invoice-item-categories.js";
 import { deleteInvoice, deleteInvoiceInputSchema, updateInvoice, updateInvoiceInputSchema } from "./tools/invoices.js";
 import {
   updateProjectUserAssignment,
@@ -49,6 +65,12 @@ export const REST_TOOL_NAMES = [
   "list_user_billable_rates",
   "get_user_billable_rate",
   "create_user_billable_rate",
+  "list_user_cost_rates",
+  "get_user_cost_rate",
+  "create_user_cost_rate",
+  "list_invoice_item_categories",
+  "get_invoice_item_category",
+  "create_invoice_item_category",
   "update_project_user_assignment",
 ] as const;
 
@@ -68,7 +90,7 @@ function toolClient(client: HarvestClient, extra: { signal: AbortSignal }): Harv
 
 /**
  * Registers Harvest REST v2 tools that the official remote MCP does not expose.
- * Invoice + user billable rates + assignment hourly rates. Do not add a second stdio server.
+ * Invoice + rates + invoice item categories. Do not add a second stdio server.
  */
 export function registerHarvestRestTools(server: McpServer, client: HarvestClient): void {
   server.registerTool(
@@ -211,6 +233,71 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       inputSchema: createUserBillableRateInputSchema,
     },
     async (args, extra) => runTool(() => createUserBillableRate(toolClient(client, extra), args)),
+  );
+
+  server.registerTool(
+    "list_user_cost_rates",
+    {
+      title: "List user cost rates",
+      description:
+        "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit cost rates.",
+      inputSchema: listUserCostRatesInputSchema,
+    },
+    async (args) => runTool(() => listUserCostRates(client, args)),
+  );
+
+  server.registerTool(
+    "get_user_cost_rate",
+    {
+      title: "Get user cost rate",
+      description:
+        "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
+      inputSchema: getUserCostRateInputSchema,
+    },
+    async (args) => runTool(() => getUserCostRate(client, args)),
+  );
+
+  server.registerTool(
+    "create_user_cost_rate",
+    {
+      title: "Create user cost rate",
+      description:
+        "POST /v2/users/{USER_ID}/cost_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
+      inputSchema: createUserCostRateInputSchema,
+    },
+    async (args) => runTool(() => createUserCostRate(client, args)),
+  );
+
+  server.registerTool(
+    "list_invoice_item_categories",
+    {
+      title: "List invoice item categories",
+      description:
+        "GET /v2/invoice_item_categories. Categories are the `kind` values used on invoice line items. Official remote MCP does not expose this.",
+      inputSchema: listInvoiceItemCategoriesInputSchema,
+    },
+    async (args) => runTool(() => listInvoiceItemCategories(client, args)),
+  );
+
+  server.registerTool(
+    "get_invoice_item_category",
+    {
+      title: "Get invoice item category",
+      description: "GET /v2/invoice_item_categories/{INVOICE_ITEM_CATEGORY_ID}. Official remote MCP does not expose this.",
+      inputSchema: getInvoiceItemCategoryInputSchema,
+    },
+    async (args) => runTool(() => getInvoiceItemCategory(client, args)),
+  );
+
+  server.registerTool(
+    "create_invoice_item_category",
+    {
+      title: "Create invoice item category",
+      description:
+        "POST /v2/invoice_item_categories. name is required; optional use_as_service / use_as_expense. Official remote MCP does not expose this.",
+      inputSchema: createInvoiceItemCategoryInputSchema,
+    },
+    async (args) => runTool(() => createInvoiceItemCategory(client, args)),
   );
 
   server.registerTool(

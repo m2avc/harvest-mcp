@@ -32,6 +32,12 @@ describe("REST tool catalog", () => {
       "list_user_billable_rates",
       "get_user_billable_rate",
       "create_user_billable_rate",
+      "list_user_cost_rates",
+      "get_user_cost_rate",
+      "create_user_cost_rate",
+      "list_invoice_item_categories",
+      "get_invoice_item_category",
+      "create_invoice_item_category",
       "update_project_user_assignment",
     ]);
   });
