@@ -17,7 +17,7 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           cache: npm
           cache-dependency-path: servers/harvest-rest/package-lock.json
 
@@ -34,7 +34,13 @@ jobs:
         env:
           # Never enable send paths in CI. Live invoice email is Mike-GO only.
           DANGEROUS_SEND: ""
-        run: npm test
+        run: |
+          mapfile -t files < <(find test -name '*.test.ts' | sort)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "no test files found under test/"
+            exit 1
+          fi
+          node --import tsx --test "${files[@]}"
 
       - name: Public-safe scan (no committed secrets)
         run: |
