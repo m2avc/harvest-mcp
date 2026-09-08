@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { DangerousSendBlockedError } from "../src/env.js";
 import {
   buildCreateInvoiceMessageBody,
   createInvoiceMessage,
@@ -11,8 +12,25 @@ import {
 } from "../src/tools/invoice-messages.js";
 import { createMockClient } from "./helpers.js";
 
+const allowSend = { DANGEROUS_SEND: "1" };
+
 describe("create_invoice_message", () => {
-  it("POSTs event_type=send to mark a draft as sent without requiring recipients", async () => {
+  it("blocks event_type=send unless DANGEROUS_SEND=1", async () => {
+    const { client, requests } = createMockClient({
+      responseBody: { id: 27835325, event_type: "send" },
+    });
+    const input = createInvoiceMessageInputSchema.parse({
+      invoice_id: 13150403,
+      event_type: "send",
+    });
+    await assert.rejects(
+      () => createInvoiceMessage(client, input, {}),
+      (error: unknown) => error instanceof DangerousSendBlockedError,
+    );
+    assert.equal(requests.length, 0);
+  });
+
+  it("POSTs event_type=send when DANGEROUS_SEND=1 (mocked; no live email)", async () => {
     const { client, requests } = createMockClient({
       responseBody: { id: 27835325, event_type: "send" },
     });
@@ -21,7 +39,7 @@ describe("create_invoice_message", () => {
       invoice_id: 13150403,
       event_type: "send",
     });
-    const result = await createInvoiceMessage(client, input);
+    const result = await createInvoiceMessage(client, input, allowSend);
 
     assert.deepEqual(result, { id: 27835325, event_type: "send" });
     assert.equal(requests[0]?.method, "POST");
@@ -38,7 +56,7 @@ describe("create_invoice_message", () => {
     }
   });
 
-  it("emails the invoice when event_type is omitted and recipients are present", async () => {
+  it("emails the invoice when event_type is omitted, recipients are present, and DANGEROUS_SEND=1 (mocked)", async () => {
     const { client, requests } = createMockClient({
       responseBody: { id: 27835324, event_type: null, subject: "Invoice #1001" },
     });
@@ -51,7 +69,7 @@ describe("create_invoice_message", () => {
       send_me_a_copy: true,
       recipients: [{ name: "Richard Roe", email: "richard@example.com" }],
     });
-    await createInvoiceMessage(client, input);
+    await createInvoiceMessage(client, input, allowSend);
 
     assert.deepEqual(requests[0]?.bodyJson, {
       recipients: [{ name: "Richard Roe", email: "richard@example.com" }],

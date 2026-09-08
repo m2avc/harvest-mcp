@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { assertDangerousSendAllowed } from "../env.js";
 import type { HarvestClient } from "../harvest-client.js";
 
 export const createInvoicePaymentInputSchema = z
@@ -42,8 +43,14 @@ export type CreateInvoicePaymentInput = z.infer<typeof createInvoicePaymentInput
 /**
  * Build the Harvest payment POST body. `notes` is copied by reference with no
  * trim / rewrite — character-for-character preservation is required.
+ *
+ * `send_thank_you` is forced false unless explicitly true *and* DANGEROUS_SEND=1,
+ * so we never inherit Harvest's default thank-you email on full payment.
  */
-export function buildCreateInvoicePaymentBody(input: CreateInvoicePaymentInput): Record<string, unknown> {
+export function buildCreateInvoicePaymentBody(
+  input: CreateInvoicePaymentInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, unknown> {
   const body: Record<string, unknown> = {
     amount: input.amount,
   };
@@ -56,8 +63,11 @@ export function buildCreateInvoicePaymentBody(input: CreateInvoicePaymentInput):
   if (input.notes !== undefined) {
     body.notes = input.notes;
   }
-  if (input.send_thank_you !== undefined) {
-    body.send_thank_you = input.send_thank_you;
+  if (input.send_thank_you === true) {
+    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env);
+    body.send_thank_you = true;
+  } else {
+    body.send_thank_you = false;
   }
   return body;
 }
@@ -77,11 +87,15 @@ export async function listInvoicePayments(
   });
 }
 
-export async function createInvoicePayment(client: HarvestClient, input: CreateInvoicePaymentInput): Promise<unknown> {
+export async function createInvoicePayment(
+  client: HarvestClient,
+  input: CreateInvoicePaymentInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<unknown> {
   return client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/payments`,
-    body: buildCreateInvoicePaymentBody(input),
+    body: buildCreateInvoicePaymentBody(input, env),
   });
 }
 

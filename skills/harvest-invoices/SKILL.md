@@ -35,6 +35,8 @@ Related: `list_clients`, `list_projects`, `list_time_entries`, `get_time_report`
 
 `preview_invoice_message` returns Harvest’s configured subject/body (`thank_you` / `reminder` query flags) and does not create a message.
 
+**Send gate:** omitting `event_type` (email) and `event_type=send` are blocked unless the host has `DANGEROUS_SEND=1` **and** Mike has GO’d a live send. Smoke / CoS tests use a throwaway draft + payment notes only — do not call the send path against live client invoices.
+
 Never claim sent / emailed / closed / reopened unless the tool succeeded.
 
 ## Update line items
@@ -53,7 +55,7 @@ Omitted fields are left unchanged.
 
 `create_invoice_payment` requires `amount`. Pass **either** `paid_at` **or** `paid_date`, not both. **`notes` must be forwarded character-for-character** — do not trim, rephrase, or “clean up” the user’s note.
 
-`send_thank_you` defaults to `true` on Harvest when omitted; set `false` if the user did not ask to email a thank-you.
+`send_thank_you` is forced **false** by harvest-rest unless `DANGEROUS_SEND=1` and the caller sets `send_thank_you=true` (do not inherit Harvest’s thank-you email default).
 
 ## Workflow tips
 
@@ -65,6 +67,7 @@ Omitted fields are left unchanged.
 ## Do not
 
 - Claim an invoice was sent without a successful `create_invoice_message`
+- Email or `event_type=send` on a live client invoice without Mike GO and `DANGEROUS_SEND=1`
 - Rewrite payment notes
 - Delete invoices, messages, or payments without clear user intent
 - Fabricate line items or totals when tools fail

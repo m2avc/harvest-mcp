@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { assertDangerousSendAllowed } from "../env.js";
 import type { HarvestClient } from "../harvest-client.js";
 
 export const invoiceMessageEventTypes = ["send", "close", "draft", "re-open"] as const;
@@ -130,7 +131,22 @@ export async function listInvoiceMessages(
   });
 }
 
-export async function createInvoiceMessage(client: HarvestClient, input: CreateInvoiceMessageInput): Promise<unknown> {
+export function isGatedInvoiceSend(input: CreateInvoiceMessageInput): boolean {
+  return input.event_type === undefined || input.event_type === "send";
+}
+
+export async function createInvoiceMessage(
+  client: HarvestClient,
+  input: CreateInvoiceMessageInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Promise<unknown> {
+  if (isGatedInvoiceSend(input)) {
+    const action =
+      input.event_type === "send"
+        ? "create_invoice_message event_type=send"
+        : "create_invoice_message email send (omit event_type)";
+    assertDangerousSendAllowed(action, env);
+  }
   return client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/messages`,

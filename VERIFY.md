@@ -14,7 +14,7 @@
 | `@anysphere/cursor-plugins` loader | SKIP on Grok Bot box (package/IDE loader not available the same way as Cursor IDE) |
 | Customize / Reload Window | SKIP — Grok Bot does not load `~/.cursor/plugins/local`; Marketplace/dashboard plugins only |
 | Live MCP OAuth smoke | SKIP here — host may already have a user Harvest connection separately |
-| Live harvest-rest E2E | SKIP in CI without creds — see shape below |
+| Live harvest-rest CoS smoke | SKIP in CI without creds — throwaway draft + payment notes only (no send) |
 
 ## harvest-rest unit coverage (no secrets)
 
@@ -30,19 +30,23 @@ npm run build
 Asserted without calling Harvest:
 
 - `PATCH /v2/invoices/{id}` header + line item create / update / `_destroy`
-- `POST /v2/invoices/{id}/messages` with `event_type=send` (and close / draft / re-open)
+- `POST /v2/invoices/{id}/messages` with `event_type=send` / email path — **mocked only**, or `DANGEROUS_SEND=1`
+- Send path **blocked** when `DANGEROUS_SEND` is unset (default)
 - Email path (omit `event_type`) requires recipients or `send_me_a_copy`
 - `GET /v2/invoices/{id}/messages/new` preview
-- `POST /v2/invoices/{id}/payments` **notes character-for-character** (whitespace, quotes, unicode)
+- `POST /v2/invoices/{id}/payments` **notes character-for-character** (whitespace, quotes, unicode); `send_thank_you` forced false
 
-## Live E2E shape (optional; do not commit tokens)
+## Live CoS smoke (optional; do not commit tokens)
+
+Throwaway **draft** only. No `create_invoice_message` send. No real client email. See `servers/harvest-rest/COS-RUNBOOK.md`.
 
 Set in the **local environment only**:
 
 - `HARVEST_ACCESS_TOKEN`
 - `HARVEST_ACCOUNT_ID`
-- `HARVEST_E2E_INVOICE_ID` — existing draft/test invoice
+- `HARVEST_E2E_INVOICE_ID` — **throwaway draft** id (not a live client invoice)
 - `HARVEST_E2E_ALLOW_MUTATIONS=1`
+- Do **not** set `DANGEROUS_SEND`
 
 Then:
 
@@ -52,11 +56,10 @@ cd servers/harvest-rest && npm test
 
 The live test (`test/e2e-live.test.ts`) will:
 
-1. `update_invoice` (purchase_order stamp)
-2. `create_invoice_message` `event_type=send`
-3. `create_invoice_payment` with a notes string that must round-trip exactly
-4. `delete_invoice_payment` cleanup
-5. `delete_invoice` only if `HARVEST_E2E_DELETE_INVOICE=1`
+1. `update_invoice` (purchase_order stamp) on that draft
+2. `create_invoice_payment` with a notes string that must round-trip exactly (`send_thank_you=false`)
+3. `delete_invoice_payment` cleanup
+4. `delete_invoice` only if `HARVEST_E2E_DELETE_INVOICE=1`
 
 ## Note
 

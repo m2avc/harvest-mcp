@@ -43,11 +43,13 @@ describe("harvest-rest MCP server", () => {
     const names = listed.tools.map((tool) => tool.name).sort();
     assert.deepEqual(names, [...REST_TOOL_NAMES].sort());
 
-    const send = await mcpClient.callTool({
+    const blockedSend = await mcpClient.callTool({
       name: "create_invoice_message",
       arguments: { invoice_id: 10, event_type: "send" },
     });
-    assert.equal(send.isError, undefined);
+    assert.equal(blockedSend.isError, true);
+    const blockedText = JSON.stringify(blockedSend.content);
+    assert.match(blockedText, /DANGEROUS_SEND/);
 
     const payment = await mcpClient.callTool({
       name: "create_invoice_payment",
@@ -57,6 +59,7 @@ describe("harvest-rest MCP server", () => {
 
     const paymentRequest = recorded.find((item) => item.url.endsWith("/payments"));
     assert.equal((paymentRequest?.bodyJson as { notes: string }).notes, VERBATIM_PAYMENT_NOTES);
+    assert.equal((paymentRequest?.bodyJson as { send_thank_you: boolean }).send_thank_you, false);
 
     await mcpClient.close();
     await server.close();

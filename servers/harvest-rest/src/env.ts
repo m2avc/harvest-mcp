@@ -15,6 +15,27 @@ export class HarvestConfigError extends Error {
   }
 }
 
+export class DangerousSendBlockedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "DangerousSendBlockedError";
+  }
+}
+
+/** Email / mark-as-sent / payment thank-you email. Defaults off. Requires Mike GO. */
+export function isDangerousSendEnabled(env: NodeJS.ProcessEnv = process.env): boolean {
+  return env.DANGEROUS_SEND === "1";
+}
+
+export function assertDangerousSendAllowed(action: string, env: NodeJS.ProcessEnv = process.env): void {
+  if (isDangerousSendEnabled(env)) {
+    return;
+  }
+  throw new DangerousSendBlockedError(
+    `${action} is blocked unless DANGEROUS_SEND=1 (default off) and Mike has GO'd a live send. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`,
+  );
+}
+
 function readTrimmed(env: NodeJS.ProcessEnv, key: string): string | undefined {
   const raw = env[key];
   if (raw === undefined) {

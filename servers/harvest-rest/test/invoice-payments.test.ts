@@ -49,6 +49,22 @@ describe("create_invoice_payment notes round-trip", () => {
     );
     assert.equal(Object.hasOwn(body, "notes"), true);
     assert.equal(body.notes, "");
+    assert.equal(body.send_thank_you, false);
+  });
+
+  it("blocks send_thank_you=true unless DANGEROUS_SEND=1", () => {
+    assert.throws(
+      () =>
+        buildCreateInvoicePaymentBody(
+          createInvoicePaymentInputSchema.parse({
+            invoice_id: 1,
+            amount: 10,
+            send_thank_you: true,
+          }),
+          {},
+        ),
+      /DANGEROUS_SEND/,
+    );
   });
 
   it("rejects paid_at and paid_date together", () => {

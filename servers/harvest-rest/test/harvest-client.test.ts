@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { HarvestApiError } from "../src/harvest-client.js";
-import { HarvestConfigError, readHarvestEnv } from "../src/env.js";
+import { assertDangerousSendAllowed, DangerousSendBlockedError, HarvestConfigError, readHarvestEnv } from "../src/env.js";
 import { createMockClient } from "./helpers.js";
 
 describe("HarvestClient", () => {
@@ -74,5 +74,15 @@ describe("readHarvestEnv", () => {
     assert.equal(env.accountId, "99");
     assert.match(env.userAgent, /m2avc-harvest-mcp/);
     assert.equal(env.apiBase, "https://api.harvestapp.com/v2");
+  });
+
+  it("keeps DANGEROUS_SEND off unless exactly 1", () => {
+    assert.throws(() => assertDangerousSendAllowed("test", {}), (error: unknown) => {
+      return error instanceof DangerousSendBlockedError;
+    });
+    assert.throws(() => assertDangerousSendAllowed("test", { DANGEROUS_SEND: "true" }), (error: unknown) => {
+      return error instanceof DangerousSendBlockedError;
+    });
+    assert.doesNotThrow(() => assertDangerousSendAllowed("test", { DANGEROUS_SEND: "1" }));
   });
 });

@@ -86,7 +86,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "Create invoice message",
       description:
-        "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Do not claim the invoice was sent unless this tool succeeds.",
+        "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send are blocked unless DANGEROUS_SEND=1 (Mike GO). Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema,
     },
     async (args) => runTool(() => createInvoiceMessage(client, args)),
@@ -128,7 +128,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "Create invoice payment",
       description:
-        "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you defaults to true on Harvest when omitted.",
+        "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
       inputSchema: createInvoicePaymentInputSchema,
     },
     async (args) => runTool(() => createInvoicePayment(client, args)),

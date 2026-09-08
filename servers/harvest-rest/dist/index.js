@@ -21440,6 +21440,23 @@ var HarvestConfigError = class extends Error {
     this.name = "HarvestConfigError";
   }
 };
+var DangerousSendBlockedError = class extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "DangerousSendBlockedError";
+  }
+};
+function isDangerousSendEnabled(env = process.env) {
+  return env.DANGEROUS_SEND === "1";
+}
+function assertDangerousSendAllowed(action, env = process.env) {
+  if (isDangerousSendEnabled(env)) {
+    return;
+  }
+  throw new DangerousSendBlockedError(
+    `${action} is blocked unless DANGEROUS_SEND=1 (default off) and Mike has GO'd a live send. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`
+  );
+}
 function readTrimmed(env, key) {
   const raw = env[key];
   if (raw === void 0) {
@@ -21695,7 +21712,14 @@ async function listInvoiceMessages(client, input) {
     }
   });
 }
-async function createInvoiceMessage(client, input) {
+function isGatedInvoiceSend(input) {
+  return input.event_type === void 0 || input.event_type === "send";
+}
+async function createInvoiceMessage(client, input, env = process.env) {
+  if (isGatedInvoiceSend(input)) {
+    const action = input.event_type === "send" ? "create_invoice_message event_type=send" : "create_invoice_message email send (omit event_type)";
+    assertDangerousSendAllowed(action, env);
+  }
   return client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/messages`,
@@ -21745,7 +21769,7 @@ var deleteInvoicePaymentInputSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
   payment_id: external_exports.coerce.number().int().positive()
 }).strict();
-function buildCreateInvoicePaymentBody(input) {
+function buildCreateInvoicePaymentBody(input, env = process.env) {
   const body = {
     amount: input.amount
   };
@@ -21758,8 +21782,11 @@ function buildCreateInvoicePaymentBody(input) {
   if (input.notes !== void 0) {
     body.notes = input.notes;
   }
-  if (input.send_thank_you !== void 0) {
-    body.send_thank_you = input.send_thank_you;
+  if (input.send_thank_you === true) {
+    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env);
+    body.send_thank_you = true;
+  } else {
+    body.send_thank_you = false;
   }
   return body;
 }
@@ -21774,11 +21801,11 @@ async function listInvoicePayments(client, input) {
     }
   });
 }
-async function createInvoicePayment(client, input) {
+async function createInvoicePayment(client, input, env = process.env) {
   return client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/payments`,
-    body: buildCreateInvoicePaymentBody(input)
+    body: buildCreateInvoicePaymentBody(input, env)
   });
 }
 async function deleteInvoicePayment(client, invoiceId, paymentId) {
@@ -21939,7 +21966,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_message",
     {
       title: "Create invoice message",
-      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Do not claim the invoice was sent unless this tool succeeds.",
+      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send are blocked unless DANGEROUS_SEND=1 (Mike GO). Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema
     },
     async (args) => runTool(() => createInvoiceMessage(client, args))
@@ -21975,7 +22002,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_payment",
     {
       title: "Create invoice payment",
-      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you defaults to true on Harvest when omitted.",
+      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
       inputSchema: createInvoicePaymentInputSchema
     },
     async (args) => runTool(() => createInvoicePayment(client, args))

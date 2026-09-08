@@ -58,6 +58,7 @@ Official remote MCP **creates and reads draft invoices** (`create_invoice`, `cre
 Use `preview_invoice_message` (`GET .../messages/new`) to fetch Harvest’s configured subject/body without sending.
 
 - After `create_invoice` / `create_invoice_from_tracked_time`, the invoice is still a **draft** until a message tool succeeds.
+- Email send (omit `event_type`) and `event_type=send` require host `DANGEROUS_SEND=1` and Mike GO. Without that flag the tool errors; do not work around it. CoS smoke is throwaway draft + payment notes only — no send.
 - Never claim an invoice was sent, emailed, closed, or paid unless the corresponding `harvest-rest` tool succeeded.
 - Prefer the `harvest-invoices` skill for invoice workflows.
 

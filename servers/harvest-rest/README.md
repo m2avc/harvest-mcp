@@ -18,8 +18,11 @@ Environment only (never commit):
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
 | `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp (support@m2avc.com)`) |
 | `HARVEST_API_BASE` | no | Override API root (tests) |
+| `DANGEROUS_SEND` | no | Must be `1` to email, `event_type=send`, or `send_thank_you=true`. Default off. Mike GO required. |
 
 Copy `.env.example` locally. Do not put tokens in plugin `mcp.json`.
+
+CoS local runbook (Cursor connect + smoke examples): [COS-RUNBOOK.md](./COS-RUNBOOK.md).
 
 ## Develop
 

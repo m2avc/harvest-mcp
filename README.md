@@ -18,6 +18,7 @@ This is community packaging by M2 AV Consulting, LLC. It is **not** an official 
    - `HARVEST_ACCESS_TOKEN` — Harvest personal access token or OAuth access token
    - `HARVEST_ACCOUNT_ID` — numeric Harvest account ID
    - `HARVEST_USER_AGENT` — optional; defaults to `m2avc-harvest-mcp (support@m2avc.com)`
+   - `DANGEROUS_SEND` — leave unset. Only `1` (plus Mike GO) unlocks emailing or `event_type=send`
 
 4. Node.js 18+ is required to run `harvest-rest`. Reload / reconnect MCP if tools do not appear.
 
