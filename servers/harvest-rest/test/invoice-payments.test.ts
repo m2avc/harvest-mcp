@@ -4,8 +4,10 @@ import { describe, it } from "node:test";
 import {
   buildCreateInvoicePaymentBody,
   createInvoicePayment,
+  createInvoicePaymentFieldsSchema,
   createInvoicePaymentInputSchema,
   deleteInvoicePayment,
+  deleteInvoicePaymentInputSchema,
   listInvoicePayments,
 } from "../src/tools/invoice-payments.js";
 import { createMockClient, VERBATIM_PAYMENT_NOTES } from "./helpers.js";
@@ -76,6 +78,18 @@ describe("create_invoice_payment notes round-trip", () => {
     });
     assert.equal(parsed.success, false);
   });
+
+  it("rejects non-finite or non-positive amounts", () => {
+    for (const amount of [0, -1, Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      const parsed = createInvoicePaymentFieldsSchema.safeParse({ invoice_id: 1, amount });
+      assert.equal(parsed.success, false, `amount ${String(amount)} should fail`);
+    }
+  });
+
+  it("exposes a plain ZodObject for MCP introspection", () => {
+    assert.equal(typeof createInvoicePaymentFieldsSchema.shape, "object");
+    assert.ok(createInvoicePaymentFieldsSchema.shape.amount);
+  });
 });
 
 describe("list / delete invoice payments", () => {
@@ -90,5 +104,13 @@ describe("list / delete invoice payments", () => {
     );
     assert.equal(requests[1]?.method, "DELETE");
     assert.equal(requests[1]?.url, "https://api.harvestapp.com/v2/invoices/13150378/payments/10336386");
+  });
+
+  it("requires confirm=true to delete a payment", () => {
+    assert.equal(deleteInvoicePaymentInputSchema.safeParse({ invoice_id: 1, payment_id: 2 }).success, false);
+    assert.equal(
+      deleteInvoicePaymentInputSchema.safeParse({ invoice_id: 1, payment_id: 2, confirm: true }).success,
+      true,
+    );
   });
 });

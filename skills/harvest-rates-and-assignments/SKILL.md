@@ -36,8 +36,8 @@ Official remote MCP OAuth does **not** authenticate harvest-rest. CoS connect st
 ## Assignment rates (create vs update)
 
 - Official `assign_user_to_project` — `project_id` + `user_id` only.
-- Then harvest-rest `update_project_user_assignment` for `use_default_rates` / alias `uses_default_rate` + `hourly_rate`.
-- Official `list_project_assignments` is the read path (`uses_default_rate`, `billable_rate`).
+- harvest-rest `update_project_user_assignment` for REST `use_default_rates` / alias `uses_default_rate` + `hourly_rate` — **only** when the user explicitly requests **and** confirms a rate change.
+- Official `list_project_assignments` is the read path (`uses_default_rate`, `billable_rate`). Do not send that official shape on the REST PATCH.
 
 ## Suggested live smoke (Harvest CoS)
 

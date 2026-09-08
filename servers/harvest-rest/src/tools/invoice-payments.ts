@@ -3,24 +3,27 @@ import { z } from "zod";
 import { assertDangerousSendAllowed } from "../env.js";
 import type { HarvestClient } from "../harvest-client.js";
 
-export const createInvoicePaymentInputSchema = z
+/** Plain ZodObject for MCP SDK introspection (`registerTool` inputSchema). */
+export const createInvoicePaymentFieldsSchema = z
   .object({
     invoice_id: z.coerce.number().int().positive(),
-    amount: z.number(),
+    amount: z.number().finite().positive(),
     paid_at: z.string().optional(),
     paid_date: z.string().optional(),
     notes: z.string().optional(),
     send_thank_you: z.boolean().optional(),
   })
-  .strict()
-  .superRefine((value, ctx) => {
-    if (value.paid_at !== undefined && value.paid_date !== undefined) {
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        message: "Pass either paid_at or paid_date, but not both (Harvest API v2).",
-      });
-    }
-  });
+  .strict();
+
+/** Refined schema — run in the tool handler, not as `inputSchema`. */
+export const createInvoicePaymentInputSchema = createInvoicePaymentFieldsSchema.superRefine((value, ctx) => {
+  if (value.paid_at !== undefined && value.paid_date !== undefined) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: "Pass either paid_at or paid_date, but not both (Harvest API v2).",
+    });
+  }
+});
 
 export const listInvoicePaymentsInputSchema = z
   .object({
@@ -35,6 +38,7 @@ export const deleteInvoicePaymentInputSchema = z
   .object({
     invoice_id: z.coerce.number().int().positive(),
     payment_id: z.coerce.number().int().positive(),
+    confirm: z.literal(true),
   })
   .strict();
 

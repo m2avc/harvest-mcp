@@ -18,11 +18,11 @@ This is community packaging by M2 AV Consulting, LLC. It is **not** an official 
    - `HARVEST_ACCESS_TOKEN` — Harvest personal access token or OAuth access token
    - `HARVEST_ACCOUNT_ID` — numeric Harvest account ID
    - `HARVEST_USER_AGENT` — optional; defaults to `m2avc-harvest-mcp (support@m2avc.com)`
-   - `DANGEROUS_SEND` — leave unset. Only `1` (plus Mike GO) unlocks emailing or `event_type=send`
+   - `DANGEROUS_SEND` — leave unset. Only `1` (plus Mike GO) unlocks emailing, `event_type=send`, or `send_thank_you=true`
 
-4. Node.js 18+ is required to run `harvest-rest`. Reload / reconnect MCP if tools do not appear.
+4. Node.js 22+ (supported LTS) is required to run `harvest-rest`. Reload / reconnect MCP if tools do not appear.
 
-Manual Cursor `mcp.json` equivalent (no plugin). Tokens stay in your local host env, not in the file:
+Manual Cursor `mcp.json` equivalent (no plugin). Tokens stay in your local host env, not in the file. Launch the tracked `dist` binary from the workspace root (no build step in this snippet):
 
 ```json
 {
@@ -32,7 +32,7 @@ Manual Cursor `mcp.json` equivalent (no plugin). Tokens stay in your local host 
     },
     "harvest-rest": {
       "command": "node",
-      "args": ["./servers/harvest-rest/dist/index.js"]
+      "args": ["${workspaceFolder}/servers/harvest-rest/dist/index.js"]
     }
   }
 }
@@ -51,7 +51,8 @@ Plugin `mcp.json` uses Agent Plugins schema (`streamable-http` + `stdio`).
 - `InvoiceMessage = { id, event_type, recipients, subject, body }`
 - `InvoicePayment = { id, amount, paid_at, paid_date, notes }`
 - `BillableRate = { id, amount, start_date, end_date }`
-- `UserAssignment = { id, project, user, use_default_rates, hourly_rate }`
+- `UserAssignment` (harvest-rest PATCH / API v2): `{ id, project, user, use_default_rates, hourly_rate }`
+- Official MCP `list_project_assignments` uses `{ uses_default_rate, billable_rate }` — same meaning, different field names. Do not send the official shape on `update_project_user_assignment`.
 
 Official MCP **creates drafts**. Sending, closing, reopening, updating, deleting, and recording payments are on **harvest-rest**. Never claim an invoice was sent unless `create_invoice_message` succeeded.
 

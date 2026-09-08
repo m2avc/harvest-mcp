@@ -11,7 +11,47 @@ export type HarvestClientOptions = {
   userAgent: string;
   apiBase?: string;
   fetchImpl?: typeof fetch;
+  /** Per-request timeout. Default 30s. Set `0` to disable. */
+  timeoutMs?: number;
 };
+
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
+/**
+ * AbortController per request. Always clears the timer on settle so a
+ * successful call cannot leak a 30s handle. Callers (including a 429 retry
+ * loop) can wrap each attempt.
+ */
+export async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<Response> {
+  if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+    return fetchImpl(url, init);
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
+  try {
+    return await fetchImpl(url, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new Error(`Harvest API request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 export class HarvestApiError extends Error {
   readonly status: number;
@@ -71,6 +111,7 @@ export class HarvestClient {
   private readonly userAgent: string;
   private readonly apiBase: string;
   private readonly fetchImpl: typeof fetch;
+  private readonly timeoutMs: number;
 
   constructor(options: HarvestClientOptions) {
     this.accessToken = options.accessToken;
@@ -78,6 +119,7 @@ export class HarvestClient {
     this.userAgent = options.userAgent;
     this.apiBase = options.apiBase ?? "https://api.harvestapp.com/v2";
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async request<T>(init: HarvestRequestInit): Promise<T> {
@@ -95,11 +137,16 @@ export class HarvestClient {
       serializedBody = JSON.stringify(init.body);
     }
 
-    const response = await this.fetchImpl(url, {
-      method: init.method,
-      headers,
-      body: serializedBody,
-    });
+    const response = await fetchWithTimeout(
+      this.fetchImpl,
+      url,
+      {
+        method: init.method,
+        headers,
+        body: serializedBody,
+      },
+      this.timeoutMs,
+    );
 
     const rawText = await response.text();
     const parsed = parseJsonBody(rawText);

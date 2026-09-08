@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { HarvestApiError } from "../src/harvest-client.js";
+import { DEFAULT_TIMEOUT_MS, HarvestApiError, HarvestClient } from "../src/harvest-client.js";
 import { assertDangerousSendAllowed, DangerousSendBlockedError, HarvestConfigError, readHarvestEnv } from "../src/env.js";
 import { createMockClient } from "./helpers.js";
 
@@ -54,6 +54,53 @@ describe("HarvestClient", () => {
       },
     );
     assert.equal(requests[0]?.headers.authorization, "Bearer test-token");
+  });
+
+  it("defaults timeoutMs to 30s and honors a caller override", async () => {
+    assert.equal(DEFAULT_TIMEOUT_MS, 30_000);
+
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seenSignal = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const error = new Error("The operation was aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    };
+
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 20,
+    });
+
+    await assert.rejects(() => client.request({ method: "GET", path: "/invoices/1" }), /timed out after 20ms/);
+    assert.equal(seenSignal?.aborted, true);
+  });
+
+  it("skips AbortController when timeoutMs is 0", async () => {
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seenSignal = init?.signal ?? undefined;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 0,
+    });
+    await client.request({ method: "GET", path: "/company" });
+    assert.equal(seenSignal, undefined);
   });
 });
 

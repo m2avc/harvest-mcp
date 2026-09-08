@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { buildUpdateInvoiceBody, deleteInvoice, updateInvoice, updateInvoiceInputSchema } from "../src/tools/invoices.js";
+import {
+  buildUpdateInvoiceBody,
+  deleteInvoice,
+  deleteInvoiceInputSchema,
+  invoiceLineItemSchema,
+  updateInvoice,
+  updateInvoiceInputSchema,
+} from "../src/tools/invoices.js";
 import { createMockClient } from "./helpers.js";
 
 describe("update_invoice", () => {
@@ -49,6 +56,11 @@ describe("update_invoice", () => {
     );
     assert.deepEqual(body, { notes: "Only notes" });
   });
+
+  it("requires a valid id on line items with _destroy=true", () => {
+    assert.equal(invoiceLineItemSchema.safeParse({ _destroy: true }).success, false);
+    assert.equal(invoiceLineItemSchema.safeParse({ id: 53341927, _destroy: true }).success, true);
+  });
 });
 
 describe("delete_invoice", () => {
@@ -59,5 +71,10 @@ describe("delete_invoice", () => {
     assert.equal(requests[0]?.method, "DELETE");
     assert.equal(requests[0]?.url, "https://api.harvestapp.com/v2/invoices/13150453");
     assert.equal(requests[0]?.bodyText, undefined);
+  });
+
+  it("requires confirm=true to delete an invoice", () => {
+    assert.equal(deleteInvoiceInputSchema.safeParse({ invoice_id: 1 }).success, false);
+    assert.equal(deleteInvoiceInputSchema.safeParse({ invoice_id: 1, confirm: true }).success, true);
   });
 });

@@ -7,6 +7,7 @@ import {
   createInvoiceMessage,
   createInvoiceMessageInputSchema,
   deleteInvoiceMessage,
+  deleteInvoiceMessageInputSchema,
   listInvoiceMessages,
   previewInvoiceMessage,
 } from "../src/tools/invoice-messages.js";
@@ -115,5 +116,16 @@ describe("preview / list / delete invoice messages", () => {
     assert.equal(requests[0]?.url, "https://api.harvestapp.com/v2/invoices/9/messages?per_page=50");
     assert.equal(requests[1]?.method, "DELETE");
     assert.equal(requests[1]?.url, "https://api.harvestapp.com/v2/invoices/9/messages/27835324");
+  });
+
+  it("requires confirm=true to delete a message", () => {
+    assert.equal(
+      deleteInvoiceMessageInputSchema.safeParse({ invoice_id: 9, message_id: 1 }).success,
+      false,
+    );
+    assert.equal(
+      deleteInvoiceMessageInputSchema.safeParse({ invoice_id: 9, message_id: 1, confirm: true }).success,
+      true,
+    );
   });
 });

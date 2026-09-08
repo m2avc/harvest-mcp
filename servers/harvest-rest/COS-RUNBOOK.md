@@ -1,10 +1,14 @@
 # Harvest CoS local runbook — harvest-rest
 
-Keep PRs **draft** until Harvest CoS smoke passes. Never email a real client invoice. Never `event_type=send` on a live client invoice without **Mike GO**.
+Never email a real client invoice. Never `event_type=send` on a live client invoice without **Mike GO**. Smoke and local checks use a **throwaway draft** on an internal/test client only.
 
-**This PR (#2) live bar:** list rates / verify **Chad $145**, then **Arabella** assignment rates. Do not invent last names, project names, or client names.
+Do **not** set `DANGEROUS_SEND` for smoke. If the variable is inherited from a parent shell or a previous Cursor MCP env, **clear it** before starting:
 
-Sister PR #1 invoice bar (same server, later or separately): throwaway draft + `update_invoice` + `create_invoice_payment` notes. Not required to merge rates.
+```bash
+unset DANGEROUS_SEND
+```
+
+Cursor users: remove `DANGEROUS_SEND` from Settings → MCP → `harvest-rest` env (or user-local `~/.cursor/mcp.json`), then **reload MCP**. Do not enable it for smoke.
 
 ## Environment
 
@@ -30,7 +34,8 @@ npm run build
 export HARVEST_ACCESS_TOKEN="…"
 export HARVEST_ACCOUNT_ID="…"
 export HARVEST_USER_AGENT="harvest-cos-smoke (you@example.com)"
-# Do not export DANGEROUS_SEND for smoke.
+unset DANGEROUS_SEND
+# Do not export DANGEROUS_SEND for smoke. Do not enable it.
 node dist/index.js
 ```
 
@@ -58,11 +63,11 @@ cd servers/harvest-rest && npm test
    - Cursor Settings → MCP → `harvest-rest` → environment: `HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `HARVEST_USER_AGENT`
    - or a **user-local** `~/.cursor/mcp.json` (never commit) with the same `env` keys and `command`/`args` pointing at this repo’s `servers/harvest-rest/dist/index.js`
    - or launch Cursor from a shell that already exported those variables (host may inherit them)
-5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include `list_user_billable_rates`, `get_user_billable_rate`, `create_user_billable_rate`, `update_project_user_assignment` plus the invoice tools from PR #1. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
+5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include invoice + rate tools. If `harvest-rest` is missing, Node 22+ is required and the env/path is wrong.
 
-Leave `DANGEROUS_SEND` unset.
+Leave `DANGEROUS_SEND` unset. If it was previously set in Cursor MCP env, remove it and reload MCP before smoke.
 
-## Suggested CoS smoke — rates (this PR)
+## Suggested CoS smoke — rates (read-only)
 
 Read-only. First names only as Harvest already used. Do **not** send invoices or client emails.
 
@@ -89,7 +94,7 @@ Replace `0` with Chad’s id. Do not invent the id.
 2. Official `list_project_assignments` (and harvest-rest `update_project_user_assignment` only if you must change a rate).
 3. Report `uses_default_rate` / `use_default_rates` and `hourly_rate` / `billable_rate` as returned. Do not invent project or client names.
 
-## Smoke examples — invoices (sister PR #1, throwaway draft only)
+## Smoke examples — invoices (throwaway draft only)
 
 Use a draft created for this test. Confirm `state` is `draft` via official `get_invoice`. Do not use a sent/open client invoice.
 

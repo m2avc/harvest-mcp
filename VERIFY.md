@@ -14,7 +14,7 @@
 | `@anysphere/cursor-plugins` loader | SKIP on Grok Bot box (package/IDE loader not available the same way as Cursor IDE) |
 | Customize / Reload Window | SKIP — Grok Bot does not load `~/.cursor/plugins/local`; Marketplace/dashboard plugins only |
 | Live MCP OAuth smoke | SKIP here — host may already have a user Harvest connection separately |
-| Live harvest-rest CoS smoke | SKIP in CI — this PR: Chad $145 + Arabella assignment rates (see COS-RUNBOOK). No invoice email. |
+| Live harvest-rest CoS smoke | SKIP 2026-09-08 — no Harvest credentials in this environment (optional; see COS-RUNBOOK). No invoice email. |
 
 ## harvest-rest unit coverage (no secrets)
 
@@ -42,11 +42,9 @@ Asserted without calling Harvest:
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**This PR (#2):** list rates / verify **Chad $145**, then **Arabella** assignment rates. Read-only. No invoice emails.
+Live CoS smoke is **optional**. This revision (2026-09-08): **SKIP** — no Harvest credentials. When credentials exist, use a throwaway **draft** only (rates read-only; invoice notes/payment notes). No `create_invoice_message` send. No real client email. Leave `DANGEROUS_SEND` unset.
 
-**Sister PR #1 (same server):** throwaway **draft** only. No `create_invoice_message` send. No real client email.
-
-Invoice e2e (not this PR’s bar):
+Invoice e2e (optional; SKIP without credentials):
 
 Set in the **local environment only**:
 
