@@ -104,6 +104,8 @@ Invoices: `list_invoices`, `get_invoice`, `create_invoice`, `create_invoice_from
 | `list_invoice_item_categories` | `GET /v2/invoice_item_categories` |
 | `get_invoice_item_category` | `GET /v2/invoice_item_categories/{ID}` |
 | `create_invoice_item_category` | `POST /v2/invoice_item_categories` |
+| `list_estimates` | `GET /v2/estimates` |
+| `get_estimate` | `GET /v2/estimates/{ESTIMATE_ID}` |
 | `update_project_user_assignment` | `PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}` |
 
 Official `assign_user_to_project` accepts **only** `project_id` + `user_id`. Set rates with `update_project_user_assignment` (`use_default_rates` / `uses_default_rate` + `hourly_rate`).

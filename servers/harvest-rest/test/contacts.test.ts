@@ -38,6 +38,8 @@ describe("REST tool catalog", () => {
       "list_invoice_item_categories",
       "get_invoice_item_category",
       "create_invoice_item_category",
+      "list_estimates",
+      "get_estimate",
       "update_project_user_assignment",
     ]);
   });
