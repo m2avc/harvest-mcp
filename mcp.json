@@ -4,6 +4,11 @@
     "harvest": {
       "type": "streamable-http",
       "url": "https://api.harvestapp.com/mcp"
+    },
+    "harvest-rest": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${PLUGIN_ROOT}/servers/harvest-rest/dist/index.js"]
     }
   }
 }

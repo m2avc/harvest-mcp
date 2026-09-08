@@ -6,7 +6,7 @@ description: >-
 ---
 # Harvest timers and time entries
 
-Requires the Harvest MCP (`use-harvest-mcp` for auth, permissions, and draft-invoice rules).
+Requires the Harvest MCP (`use-harvest-mcp` for auth, permissions, and invoice send rules).
 
 ## Tools in this skill
 
