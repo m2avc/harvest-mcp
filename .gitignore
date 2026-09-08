@@ -1,0 +1,10 @@
+node_modules/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+.DS_Store
+servers/harvest-rest/.env
+servers/harvest-rest/.env.*
+!servers/harvest-rest/.env.example
