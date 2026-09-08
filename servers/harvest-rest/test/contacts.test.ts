@@ -17,7 +17,7 @@ describe("list_contacts", () => {
 });
 
 describe("REST tool catalog", () => {
-  it("exports the P0 invoice REST tool names", () => {
+  it("exports invoice and rate REST tool names on the single stdio server", () => {
     assert.deepEqual([...REST_TOOL_NAMES], [
       "update_invoice",
       "delete_invoice",
@@ -29,6 +29,10 @@ describe("REST tool catalog", () => {
       "create_invoice_payment",
       "delete_invoice_payment",
       "list_contacts",
+      "list_user_billable_rates",
+      "get_user_billable_rate",
+      "create_user_billable_rate",
+      "update_project_user_assignment",
     ]);
   });
 });

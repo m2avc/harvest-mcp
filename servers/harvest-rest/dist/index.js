@@ -21815,6 +21815,53 @@ async function deleteInvoicePayment(client, invoiceId, paymentId) {
   });
 }
 
+// src/tools/billable-rates.ts
+var isoDateSchema = external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/, "start_date must be YYYY-MM-DD");
+var listUserBillableRatesInputSchema = external_exports.object({
+  user_id: external_exports.coerce.number().int().positive(),
+  page: external_exports.coerce.number().int().positive().optional(),
+  per_page: external_exports.coerce.number().int().min(1).max(2e3).optional()
+}).strict();
+var getUserBillableRateInputSchema = external_exports.object({
+  user_id: external_exports.coerce.number().int().positive(),
+  billable_rate_id: external_exports.coerce.number().int().positive()
+}).strict();
+var createUserBillableRateInputSchema = external_exports.object({
+  user_id: external_exports.coerce.number().int().positive(),
+  amount: external_exports.number(),
+  start_date: isoDateSchema.optional()
+}).strict();
+function buildCreateBillableRateBody(input) {
+  const body = { amount: input.amount };
+  if (input.start_date !== void 0) {
+    body.start_date = input.start_date;
+  }
+  return body;
+}
+async function listUserBillableRates(client, input) {
+  return client.request({
+    method: "GET",
+    path: `/users/${input.user_id}/billable_rates`,
+    query: {
+      page: input.page,
+      per_page: input.per_page
+    }
+  });
+}
+async function getUserBillableRate(client, input) {
+  return client.request({
+    method: "GET",
+    path: `/users/${input.user_id}/billable_rates/${input.billable_rate_id}`
+  });
+}
+async function createUserBillableRate(client, input) {
+  return client.request({
+    method: "POST",
+    path: `/users/${input.user_id}/billable_rates`,
+    body: buildCreateBillableRateBody(input)
+  });
+}
+
 // src/tools/invoices.ts
 var paymentTermSchema = external_exports.enum(["upon receipt", "net 15", "net 30", "net 45", "net 60", "custom"]);
 var paymentOptionSchema = external_exports.enum(["ach", "credit_card", "paypal"]);
@@ -21926,6 +21973,58 @@ async function deleteInvoice(client, invoiceId) {
   });
 }
 
+// src/tools/user-assignments.ts
+var updateProjectUserAssignmentInputSchema = external_exports.object({
+  project_id: external_exports.coerce.number().int().positive(),
+  user_assignment_id: external_exports.coerce.number().int().positive(),
+  use_default_rates: external_exports.boolean().optional(),
+  uses_default_rate: external_exports.boolean().optional(),
+  hourly_rate: external_exports.number().optional(),
+  is_active: external_exports.boolean().optional(),
+  is_project_manager: external_exports.boolean().optional(),
+  budget: external_exports.number().optional()
+}).strict();
+function resolveUseDefaultRates(input) {
+  const rest = input.use_default_rates;
+  const alias = input.uses_default_rate;
+  if (rest !== void 0 && alias !== void 0 && rest !== alias) {
+    throw new HarvestConfigError("use_default_rates and uses_default_rate were both provided and do not match");
+  }
+  return rest ?? alias;
+}
+function buildUpdateAssignmentBody(input) {
+  const body = {};
+  const useDefault = resolveUseDefaultRates(input);
+  if (useDefault !== void 0) {
+    body.use_default_rates = useDefault;
+  }
+  if (input.hourly_rate !== void 0) {
+    body.hourly_rate = input.hourly_rate;
+  }
+  if (input.is_active !== void 0) {
+    body.is_active = input.is_active;
+  }
+  if (input.is_project_manager !== void 0) {
+    body.is_project_manager = input.is_project_manager;
+  }
+  if (input.budget !== void 0) {
+    body.budget = input.budget;
+  }
+  if (Object.keys(body).length === 0) {
+    throw new HarvestConfigError(
+      "Provide at least one field to update: use_default_rates / uses_default_rate, hourly_rate, is_active, is_project_manager, or budget"
+    );
+  }
+  return body;
+}
+async function updateProjectUserAssignment(client, input) {
+  return client.request({
+    method: "PATCH",
+    path: `/projects/${input.project_id}/user_assignments/${input.user_assignment_id}`,
+    body: buildUpdateAssignmentBody(input)
+  });
+}
+
 // src/register-tools.ts
 async function runTool(work) {
   try {
@@ -22024,6 +22123,42 @@ function registerHarvestRestTools(server, client) {
       inputSchema: listContactsInputSchema
     },
     async (args) => runTool(() => listContacts(client, args))
+  );
+  server.registerTool(
+    "list_user_billable_rates",
+    {
+      title: "List user billable rates",
+      description: "GET /v2/users/{USER_ID}/billable_rates. Lists a user's default billable rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit billable rates.",
+      inputSchema: listUserBillableRatesInputSchema
+    },
+    async (args) => runTool(() => listUserBillableRates(client, args))
+  );
+  server.registerTool(
+    "get_user_billable_rate",
+    {
+      title: "Get user billable rate",
+      description: "GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
+      inputSchema: getUserBillableRateInputSchema
+    },
+    async (args) => runTool(() => getUserBillableRate(client, args))
+  );
+  server.registerTool(
+    "create_user_billable_rate",
+    {
+      title: "Create user billable rate",
+      description: "POST /v2/users/{USER_ID}/billable_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
+      inputSchema: createUserBillableRateInputSchema
+    },
+    async (args) => runTool(() => createUserBillableRate(client, args))
+  );
+  server.registerTool(
+    "update_project_user_assignment",
+    {
+      title: "Update project user assignment",
+      description: "PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}. Set use_default_rates (REST) or uses_default_rate (official MCP alias) and hourly_rate. Official assign_user_to_project accepts only project_id + user_id.",
+      inputSchema: updateProjectUserAssignmentInputSchema
+    },
+    async (args) => runTool(() => updateProjectUserAssignment(client, args))
   );
 }
 

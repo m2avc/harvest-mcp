@@ -2,11 +2,11 @@
 
 Custom **stdio MCP server** for Harvest API v2 resources that the official remote MCP (`https://api.harvestapp.com/mcp`) does not expose.
 
-This is the **single** REST entrypoint for this plugin. Add later gaps (billable rates, etc.) here — do not add a second stdio package.
+This is the **single** REST entrypoint for this plugin. Do not add a second stdio package.
 
 ## Tools (P0)
 
-See the root README and [Harvest API v2](https://help.getharvest.com/api-v2/).
+Invoice update/messages/payments plus user billable rates and project assignment hourly rates. See the root README, [User billable rates](https://help.getharvest.com/api-v2/users-api/users/billable-rates/), and [Project user assignments](https://help.getharvest.com/api-v2/projects-api/projects/user-assignments/).
 
 ## Auth
 
