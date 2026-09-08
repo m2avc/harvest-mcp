@@ -97,6 +97,12 @@ Invoices: `list_invoices`, `get_invoice`, `create_invoice`, `create_invoice_from
 | `list_user_billable_rates` | `GET /v2/users/{USER_ID}/billable_rates` |
 | `get_user_billable_rate` | `GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}` |
 | `create_user_billable_rate` | `POST /v2/users/{USER_ID}/billable_rates` |
+| `list_user_cost_rates` | `GET /v2/users/{USER_ID}/cost_rates` |
+| `get_user_cost_rate` | `GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}` |
+| `create_user_cost_rate` | `POST /v2/users/{USER_ID}/cost_rates` |
+| `list_invoice_item_categories` | `GET /v2/invoice_item_categories` |
+| `get_invoice_item_category` | `GET /v2/invoice_item_categories/{ID}` |
+| `create_invoice_item_category` | `POST /v2/invoice_item_categories` |
 | `update_project_user_assignment` | `PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}` |
 
 Official `assign_user_to_project` accepts **only** `project_id` + `user_id`. Set rates with `update_project_user_assignment` (`use_default_rates` / `uses_default_rate` + `hourly_rate`).

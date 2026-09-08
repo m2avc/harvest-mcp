@@ -6,7 +6,7 @@ This is the **single** REST entrypoint for this plugin. Do not add a second stdi
 
 ## Tools (P0)
 
-Invoice update/messages/payments plus user billable rates and project assignment hourly rates. See the root README, [User billable rates](https://help.getharvest.com/api-v2/users-api/users/billable-rates/), and [Project user assignments](https://help.getharvest.com/api-v2/projects-api/projects/user-assignments/).
+Invoice update/messages/payments plus user billable/cost rates, invoice item categories, and project assignment hourly rates. See the root README and [docs/API_V2_GAP_MATRIX.md](../../docs/API_V2_GAP_MATRIX.md).
 
 ## Auth
 

@@ -163,11 +163,11 @@ Line items are **not** a separate resource: create/update/`_destroy` on `POST/PA
 | GET | `/v2/invoices/{ID}/payments` | `list_invoice_payments` | — | P0 invoices | done (REST) |
 | POST | `/v2/invoices/{ID}/payments` | `create_invoice_payment` (`send_thank_you` gated) | — | P0 invoices | done (REST) |
 | DELETE | `/v2/invoices/{ID}/payments/{PAYMENT_ID}` | `delete_invoice_payment` | — | P0 invoices | done (REST) |
-| GET | `/v2/invoice_item_categories` | — | — | P1 | todo |
-| GET | `/v2/invoice_item_categories/{ID}` | — | — | P1 | todo |
-| POST | `/v2/invoice_item_categories` | — | — | P1 | todo |
-| PATCH | `/v2/invoice_item_categories/{ID}` | — | — | P1 | todo |
-| DELETE | `/v2/invoice_item_categories/{ID}` | — | — | P1 | todo |
+| GET | `/v2/invoice_item_categories` | `list_invoice_item_categories` | — | P1 | done (REST) |
+| GET | `/v2/invoice_item_categories/{ID}` | `get_invoice_item_category` | — | P1 | done (REST) |
+| POST | `/v2/invoice_item_categories` | `create_invoice_item_category` | — | P1 | done (REST) |
+| PATCH | `/v2/invoice_item_categories/{ID}` | — | — | P2 | todo |
+| DELETE | `/v2/invoice_item_categories/{ID}` | — | — | P2 | todo |
 
 ### Estimates
 
@@ -278,9 +278,9 @@ Entire domain missing from official MCP and harvest-rest.
 | GET | `/v2/users/{USER_ID}/billable_rates` | `list_user_billable_rates` | — | P0 rates | done (REST) |
 | GET | `/v2/users/{USER_ID}/billable_rates/{ID}` | `get_user_billable_rate` | — | P0 rates | done (REST) |
 | POST | `/v2/users/{USER_ID}/billable_rates` | `create_user_billable_rate` | — | P0 rates | done (REST) |
-| GET | `/v2/users/{USER_ID}/cost_rates` | — | — | P1 | todo |
-| GET | `/v2/users/{USER_ID}/cost_rates/{ID}` | — | — | P1 | todo |
-| POST | `/v2/users/{USER_ID}/cost_rates` | — | — | P1 | todo |
+| GET | `/v2/users/{USER_ID}/cost_rates` | `list_user_cost_rates` | — | P1 | done (REST) |
+| GET | `/v2/users/{USER_ID}/cost_rates/{ID}` | `get_user_cost_rate` | — | P1 | done (REST) |
+| POST | `/v2/users/{USER_ID}/cost_rates` | `create_user_cost_rate` | — | P1 | done (REST) |
 | GET | `/v2/users/{USER_ID}/teammates` | — | — | P2 | todo |
 | PATCH | `/v2/users/{USER_ID}/teammates` | — | — | P2 | todo |
 | GET | `/v2/users/{USER_ID}/project_assignments` | — | `list_project_assignments` (likely `/users/me/...`) | P2 | partial (MCP) |
@@ -351,12 +351,13 @@ Official MCP also has `submit_feedback` (not a v2 REST resource).
 
 ### P1 — follow-up draft (highest-value missing tools)
 
-- [ ] Invoice item categories: list / get / create (update/delete if still small)
-- [ ] User cost rates: list / get / create (mirror billable rates)
-- [ ] Optional: PATCH task assignment hourly rate / budget (official add-task has no rate fields)
+- [x] Invoice item categories: list / get / create
+- [x] User cost rates: list / get / create (mirror billable rates)
+- [ ] Optional: PATCH task assignment hourly rate / budget (official add-task has no rate fields) — deferred to P2
 
 ### P2 — later drafts
 
+- [ ] Invoice item category PATCH/DELETE
 - [ ] Estimates + estimate messages (gate email) + estimate item categories
 - [ ] PTO (assignments, allocations, calendars, balances, types, requests, schedules)
 - [ ] Roles, user teammates, `GET /v2/users/me`
