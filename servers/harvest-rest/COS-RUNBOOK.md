@@ -13,7 +13,7 @@ This compliance PR is **client reliability + gap matrix only**. It does not add 
 Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/) and [Authentication](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/):
 
 - Every request sends `Authorization: Bearer …`, `Harvest-Account-Id`, and a **User-Agent** with the **integration** name plus author contact (link or email). Missing UA → `400`. Do **not** set UA from the end customer's Harvest email or company.
-- Default marketplace UA: `m2avc-harvest-mcp/<version> (mn@m2avc.com)`. CoS leaning **mn@**; `support@m2avc.com` is the alternate if Mike flips. Override with `HARVEST_USER_AGENT` (e.g. `harvest-cos-smoke (you@example.com)`).
+- Default marketplace UA (Mike-locked): `m2avc-harvest-mcp/<semver> (mn@m2avc.com)`. **Semver** is the root `package.json` `version` (single source of truth; keep `plugin.json` and `servers/harvest-rest/package.json` equal). Override with `HARVEST_USER_AGENT` (e.g. `harvest-cos-smoke (you@example.com)`).
 - Account identity is **Harvest-Account-Id + token** only.
 - GET parameters go in the query string. POST/PATCH JSON bodies send `Content-Type: application/json`.
 - Statuses to expect: `200`/`201` success; `400` bad request; `403` permission; `404` missing; `422` validation (`message` / `errors`); `429` throttle; `500` Harvest error.
@@ -31,7 +31,7 @@ Set on the **host** (Cursor MCP env or your shell). Do not put tokens in repo `m
 | --- | --- | --- |
 | `HARVEST_ACCESS_TOKEN` | yes | `Authorization: Bearer …` |
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
-| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`). CoS may set `harvest-cos-smoke (you@example.com)`. |
+| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`). CoS may set `harvest-cos-smoke (you@example.com)`. |
 | `DANGEROUS_SEND` | no | Default **off**. Only `DANGEROUS_SEND=1` unlocks email send (omit `event_type`), `event_type=send`, and `send_thank_you=true`. Requires Mike GO. |
 
 Copy `servers/harvest-rest/.env.example` locally if useful. Never commit a filled `.env`.

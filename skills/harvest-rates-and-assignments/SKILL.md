@@ -20,7 +20,7 @@ Host env only — do not paste tokens into chat:
 
 - `HARVEST_ACCESS_TOKEN` → `Authorization: Bearer …`
 - `HARVEST_ACCOUNT_ID` → `Harvest-Account-Id`
-- `HARVEST_USER_AGENT` → `User-Agent` (default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`; integration author contact)
+- `HARVEST_USER_AGENT` → `User-Agent` (default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`; integration author contact)
 
 Official remote MCP OAuth does **not** authenticate harvest-rest. CoS connect steps: `servers/harvest-rest/COS-RUNBOOK.md`.
 

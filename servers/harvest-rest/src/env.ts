@@ -1,10 +1,11 @@
 import { PACKAGE_VERSION } from "./version.js";
 
 /**
- * Marketplace default User-Agent. Harvest requires the *integration author*
- * contact (app name + link or email), not the end customer's Harvest email.
- * CoS leaning mn@m2avc.com; support@m2avc.com is the alternate if Mike flips.
- * https://help.getharvest.com/api-v2/introduction/overview/general/
+ * Marketplace default User-Agent (Mike-locked 2026-09-08):
+ * `m2avc-harvest-mcp/<semver> (mn@m2avc.com)`
+ * Semver comes from repo-root `package.json`. `HARVEST_USER_AGENT` still wins.
+ * Harvest requires the *integration author* contact, not the end customer's
+ * Harvest email or company. https://help.getharvest.com/api-v2/introduction/overview/general/
  */
 export const DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 export const DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";

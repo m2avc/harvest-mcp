@@ -21431,8 +21431,16 @@ var StdioServerTransport = class {
   }
 };
 
+// ../../package.json
+var package_default = {
+  name: "m2avc-harvest-mcp",
+  version: "0.2.0",
+  private: true,
+  description: "Marketplace plugin semver \u2014 single source of truth for harvest-rest User-Agent (m2avc-harvest-mcp/<semver> (mn@m2avc.com)). Keep plugin.json and servers/harvest-rest/package.json versions equal. Never put tokens here."
+};
+
 // src/version.ts
-var PACKAGE_VERSION = "0.2.0";
+var PACKAGE_VERSION = package_default.version;
 
 // src/env.ts
 var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;

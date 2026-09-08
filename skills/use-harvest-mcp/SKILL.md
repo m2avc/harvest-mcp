@@ -14,7 +14,7 @@ This plugin ships **two** MCP servers:
 | Server | Transport | Auth |
 | --- | --- | --- |
 | `harvest` | Official remote `https://api.harvestapp.com/mcp` (`streamable-http`) | Host OAuth |
-| `harvest-rest` | Local stdio (`servers/harvest-rest`) | `HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` (+ optional `HARVEST_USER_AGENT`; default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`) |
+| `harvest-rest` | Local stdio (`servers/harvest-rest`) | `HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` (+ optional `HARVEST_USER_AGENT`; default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`) |
 
 Never ask the user to paste a personal access token, Account ID, or other secrets into chat or into this repo. If `harvest-rest` tools fail with a config error, tell the user to set those variables in the **host environment**, not in chat.
 

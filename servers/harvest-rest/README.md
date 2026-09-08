@@ -16,7 +16,7 @@ Environment only (never commit):
 | --- | --- | --- |
 | `HARVEST_ACCESS_TOKEN` | yes | `Authorization: Bearer …` |
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
-| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`). Harvest requires the integration author contact, not the end-user email. See [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/). |
+| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)`; `<semver>` from repo-root `package.json`). Harvest requires the integration author contact, not the end-user email. See [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/). |
 | `HARVEST_API_BASE` | no | Override API root (tests) |
 | `DANGEROUS_SEND` | no | Must be `1` to email, `event_type=send`, or `send_thank_you=true`. Default off. Mike GO required. |
 

@@ -81,7 +81,7 @@ Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/g
 | POST/PATCH params | JSON body **or** form data; JSON requires `Content-Type: application/json` | JSON + `Content-Type` when body present | n/a | P0 | done |
 | `Authorization` | `Bearer $ACCESS_TOKEN` (header preferred; query-string token also documented — **do not use**, URLs get logged) | Header only | Host OAuth | P0 | done |
 | `Harvest-Account-Id` | Required for API v2 (PAT can access multiple accounts) | Required env | OAuth session | P0 | done |
-| `User-Agent` | **Required**: application name **+** link **or** email. Contact is the **integration author**, not the end customer. Missing UA → **400**. | Default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`; override `HARVEST_USER_AGENT`. Never derived from end-user Harvest email/company. | Unknown (Harvest-hosted) | P0 | done |
+| `User-Agent` | **Required**: application name **+** link **or** email. Contact is the **integration author**, not the end customer. Missing UA → **400**. | Default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` — `<semver>` from root `package.json` (Mike-locked). Override `HARVEST_USER_AGENT`. Never derived from end-user Harvest email/company. | Unknown (Harvest-hosted) | P0 | done |
 | `Accept` | Responses are JSON | Sends `Accept: application/json` | n/a | P0 | done |
 | 200 / 201 | Success / created | Parsed JSON (empty body → `{ ok, status }`) | n/a | P0 | done |
 | 400 | Bad request (incl. missing UA) | `HarvestApiError` + hint | n/a | P0 | done |
@@ -96,7 +96,7 @@ Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/g
 | Pagination | Follow `links.first/next/previous/last`; default `per_page` max **2000**; invalid `per_page` → 422; `page` and `cursor` mutually exclusive (`cursor` wins); `page` deprecated on some lists | List tools accept `page`/`per_page` and return Harvest JSON (`links` included). Do **not** construct next URLs. No auto-follow. | Unknown | P2 | partial |
 | Query-string auth | `?access_token=&account_id=` documented | **Not implemented** (header auth only) | n/a | P0 | done (intentionally omitted) |
 
-CoS UA note: default mailbox is **mn@m2avc.com**. `support@m2avc.com` is the alternate if Mike flips. Override stays `HARVEST_USER_AGENT`.
+Mike-locked UA (2026-09-08): `m2avc-harvest-mcp/<semver> (mn@m2avc.com)`. Semver source of truth is the **repo-root** `package.json` `version`. Keep `plugin.json` and `servers/harvest-rest/package.json` versions equal. `HARVEST_USER_AGENT` still overrides. Do not derive UA from the end-user Harvest email or company.
 
 ---
 
@@ -328,7 +328,7 @@ Official MCP also has `submit_feedback` (not a v2 REST resource).
 | Official remote MCP URL | `https://api.harvestapp.com/mcp` in `mcp.json` | done |
 | Single stdio REST server | `servers/harvest-rest` only | done |
 | Tokens not in `mcp.json` | Host env: `HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID` | done |
-| Default UA | `m2avc-harvest-mcp/<version> (mn@m2avc.com)` | P0 done |
+| Default UA | `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json` | P0 done |
 | UA override | `HARVEST_USER_AGENT` | P0 done |
 | UA not from customer identity | No dynamic email/company UA | P0 done |
 | `DANGEROUS_SEND` | Default off; `1` + Mike GO for live send | done |
@@ -340,7 +340,7 @@ Official MCP also has `submit_feedback` (not a v2 REST resource).
 
 ### P0 — this PR (client reliability)
 
-- [x] Default User-Agent `m2avc-harvest-mcp/<version> (mn@m2avc.com)`
+- [x] Default User-Agent `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`
 - [x] Honor `HARVEST_USER_AGENT`
 - [x] Required headers: `Authorization`, `Harvest-Account-Id`, `User-Agent`, `Accept`; `Content-Type` on JSON bodies
 - [x] GET query vs POST/PATCH JSON body

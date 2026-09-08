@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
+
 import {
   assertDangerousSendAllowed,
   DangerousSendBlockedError,
@@ -237,7 +241,23 @@ describe("readHarvestEnv", () => {
     );
   });
 
-  it("defaults User-Agent to marketplace app name + version + author email", () => {
+  it("defaults User-Agent from root package.json semver (Mike-locked author contact)", () => {
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "../../..");
+    const pluginPkg = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+      name: string;
+      version: string;
+    };
+    const pluginManifest = JSON.parse(readFileSync(join(repoRoot, "plugin.json"), "utf8")) as { version: string };
+    const restPkg = JSON.parse(readFileSync(join(repoRoot, "servers/harvest-rest/package.json"), "utf8")) as {
+      version: string;
+    };
+
+    assert.equal(pluginPkg.name, "m2avc-harvest-mcp");
+    assert.match(pluginPkg.version, /^\d+\.\d+\.\d+/);
+    assert.equal(pluginPkg.version, pluginManifest.version);
+    assert.equal(pluginPkg.version, restPkg.version);
+    assert.equal(PACKAGE_VERSION, pluginPkg.version);
+
     const env = readHarvestEnv({
       HARVEST_ACCESS_TOKEN: " tok ",
       HARVEST_ACCOUNT_ID: " 99 ",
@@ -245,7 +265,7 @@ describe("readHarvestEnv", () => {
     assert.equal(env.accessToken, "tok");
     assert.equal(env.accountId, "99");
     assert.equal(env.userAgent, DEFAULT_HARVEST_USER_AGENT);
-    assert.equal(env.userAgent, `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`);
+    assert.equal(env.userAgent, `m2avc-harvest-mcp/${pluginPkg.version} (mn@m2avc.com)`);
     assert.doesNotMatch(env.userAgent, /support@m2avc.com/);
     assert.equal(env.apiBase, "https://api.harvestapp.com/v2");
   });
