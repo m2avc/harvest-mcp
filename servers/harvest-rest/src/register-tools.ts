@@ -2,6 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { errorToolResult, jsonToolResult, type HarvestClient } from "./harvest-client.js";
 import { listContacts, listContactsInputSchema } from "./tools/contacts.js";
+import { getEstimate, getEstimateInputSchema, listEstimates, listEstimatesInputSchema } from "./tools/estimates.js";
 import {
   createInvoiceMessage,
   createInvoiceMessageInputSchema,
@@ -70,6 +71,8 @@ export const REST_TOOL_NAMES = [
   "list_invoice_item_categories",
   "get_invoice_item_category",
   "create_invoice_item_category",
+  "list_estimates",
+  "get_estimate",
   "update_project_user_assignment",
 ] as const;
 
@@ -289,6 +292,28 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       inputSchema: createInvoiceItemCategoryInputSchema,
     },
     async (args) => runTool(() => createInvoiceItemCategory(client, args)),
+  );
+
+  server.registerTool(
+    "list_estimates",
+    {
+      title: "List estimates",
+      description:
+        "GET /v2/estimates. Official remote MCP has no estimates tools. Filter with client_id, state (draft|sent|accepted|declined), from, to, updated_since. Read-only.",
+      inputSchema: listEstimatesInputSchema,
+    },
+    async (args) => runTool(() => listEstimates(client, args)),
+  );
+
+  server.registerTool(
+    "get_estimate",
+    {
+      title: "Get estimate",
+      description:
+        "GET /v2/estimates/{ESTIMATE_ID}. Returns the estimate including line_items and client_key (public client URL). Does not send or accept the estimate.",
+      inputSchema: getEstimateInputSchema,
+    },
+    async (args) => runTool(() => getEstimate(client, args)),
   );
 
   server.registerTool(

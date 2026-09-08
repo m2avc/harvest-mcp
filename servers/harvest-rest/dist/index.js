@@ -21732,6 +21732,42 @@ async function listContacts(client, input) {
   });
 }
 
+// src/tools/estimates.ts
+var estimateStateSchema = external_exports.enum(["draft", "sent", "accepted", "declined"]);
+var listEstimatesInputSchema = external_exports.object({
+  client_id: external_exports.coerce.number().int().positive().optional(),
+  updated_since: external_exports.string().optional(),
+  from: external_exports.string().optional(),
+  to: external_exports.string().optional(),
+  state: estimateStateSchema.optional(),
+  page: external_exports.coerce.number().int().positive().optional(),
+  per_page: external_exports.coerce.number().int().min(1).max(2e3).optional()
+}).strict();
+var getEstimateInputSchema = external_exports.object({
+  estimate_id: external_exports.coerce.number().int().positive()
+}).strict();
+async function listEstimates(client, input) {
+  return client.request({
+    method: "GET",
+    path: "/estimates",
+    query: {
+      client_id: input.client_id,
+      updated_since: input.updated_since,
+      from: input.from,
+      to: input.to,
+      state: input.state,
+      page: input.page,
+      per_page: input.per_page
+    }
+  });
+}
+async function getEstimate(client, input) {
+  return client.request({
+    method: "GET",
+    path: `/estimates/${input.estimate_id}`
+  });
+}
+
 // src/tools/invoice-messages.ts
 var invoiceMessageEventTypes = ["send", "close", "draft", "re-open"];
 var eventTypeSchema = external_exports.enum(invoiceMessageEventTypes);
@@ -22421,6 +22457,24 @@ function registerHarvestRestTools(server, client) {
       inputSchema: createInvoiceItemCategoryInputSchema
     },
     async (args) => runTool(() => createInvoiceItemCategory(client, args))
+  );
+  server.registerTool(
+    "list_estimates",
+    {
+      title: "List estimates",
+      description: "GET /v2/estimates. Official remote MCP has no estimates tools. Filter with client_id, state (draft|sent|accepted|declined), from, to, updated_since. Read-only.",
+      inputSchema: listEstimatesInputSchema
+    },
+    async (args) => runTool(() => listEstimates(client, args))
+  );
+  server.registerTool(
+    "get_estimate",
+    {
+      title: "Get estimate",
+      description: "GET /v2/estimates/{ESTIMATE_ID}. Returns the estimate including line_items and client_key (public client URL). Does not send or accept the estimate.",
+      inputSchema: getEstimateInputSchema
+    },
+    async (args) => runTool(() => getEstimate(client, args))
   );
   server.registerTool(
     "update_project_user_assignment",
