@@ -37,12 +37,8 @@ Asserted without calling Harvest:
 - `POST /v2/invoices/{id}/payments` **notes character-for-character** (whitespace, quotes, unicode); `send_thank_you` forced false
 - `GET/POST /v2/users/{id}/billable_rates` and GET-by-id
 - `PATCH /v2/projects/{id}/user_assignments/{id}` maps `uses_default_rate` → `use_default_rates`
-<<<<<<< HEAD
 - Default User-Agent `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`; `HARVEST_USER_AGENT` override; 429 `Retry-After` retry; 4xx/5xx mapping (no token leak)
-=======
-- Default User-Agent `m2avc-harvest-mcp/<version> (mn@m2avc.com)`; `HARVEST_USER_AGENT` override; 429 `Retry-After` retry; 4xx/5xx mapping (no token leak)
 - P1: invoice item categories list/get/create; user cost rates list/get/create (mocked; no live send)
->>>>>>> b5efe57 (feat: P1 invoice item categories and user cost rates)
 
 ## Live CoS smoke (optional; do not commit tokens)
 
