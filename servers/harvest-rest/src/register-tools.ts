@@ -20,7 +20,19 @@ import {
   listInvoicePayments,
   listInvoicePaymentsInputSchema,
 } from "./tools/invoice-payments.js";
+import {
+  createUserBillableRate,
+  createUserBillableRateInputSchema,
+  getUserBillableRate,
+  getUserBillableRateInputSchema,
+  listUserBillableRates,
+  listUserBillableRatesInputSchema,
+} from "./tools/billable-rates.js";
 import { deleteInvoice, deleteInvoiceInputSchema, updateInvoice, updateInvoiceInputSchema } from "./tools/invoices.js";
+import {
+  updateProjectUserAssignment,
+  updateProjectUserAssignmentInputSchema,
+} from "./tools/user-assignments.js";
 
 export const REST_TOOL_NAMES = [
   "update_invoice",
@@ -33,6 +45,10 @@ export const REST_TOOL_NAMES = [
   "create_invoice_payment",
   "delete_invoice_payment",
   "list_contacts",
+  "list_user_billable_rates",
+  "get_user_billable_rate",
+  "create_user_billable_rate",
+  "update_project_user_assignment",
 ] as const;
 
 export type RestToolName = (typeof REST_TOOL_NAMES)[number];
@@ -47,7 +63,7 @@ async function runTool(work: () => Promise<unknown>) {
 
 /**
  * Registers Harvest REST v2 tools that the official remote MCP does not expose.
- * Add further gap tools (for example billable rates) in this same server.
+ * Invoice + user billable rates + assignment hourly rates. Do not add a second stdio server.
  */
 export function registerHarvestRestTools(server: McpServer, client: HarvestClient): void {
   server.registerTool(
@@ -153,5 +169,49 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       inputSchema: listContactsInputSchema,
     },
     async (args) => runTool(() => listContacts(client, args)),
+  );
+
+  server.registerTool(
+    "list_user_billable_rates",
+    {
+      title: "List user billable rates",
+      description:
+        "GET /v2/users/{USER_ID}/billable_rates. Lists a user's default billable rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit billable rates.",
+      inputSchema: listUserBillableRatesInputSchema,
+    },
+    async (args) => runTool(() => listUserBillableRates(client, args)),
+  );
+
+  server.registerTool(
+    "get_user_billable_rate",
+    {
+      title: "Get user billable rate",
+      description:
+        "GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
+      inputSchema: getUserBillableRateInputSchema,
+    },
+    async (args) => runTool(() => getUserBillableRate(client, args)),
+  );
+
+  server.registerTool(
+    "create_user_billable_rate",
+    {
+      title: "Create user billable rate",
+      description:
+        "POST /v2/users/{USER_ID}/billable_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
+      inputSchema: createUserBillableRateInputSchema,
+    },
+    async (args) => runTool(() => createUserBillableRate(client, args)),
+  );
+
+  server.registerTool(
+    "update_project_user_assignment",
+    {
+      title: "Update project user assignment",
+      description:
+        "PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}. Set use_default_rates (REST) or uses_default_rate (official MCP alias) and hourly_rate. Official assign_user_to_project accepts only project_id + user_id.",
+      inputSchema: updateProjectUserAssignmentInputSchema,
+    },
+    async (args) => runTool(() => updateProjectUserAssignment(client, args)),
   );
 }

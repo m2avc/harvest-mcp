@@ -12,7 +12,9 @@ Requires the Harvest MCP (`use-harvest-mcp` for auth and permissions).
 
 **Clients / projects / tasks:** `list_clients`, `create_client`, `update_client`, `list_projects`, `create_project`, `update_project`, `get_project_budget`, `list_tasks`, `create_task`, `update_task`, `add_task_to_project`, `remove_task_from_project`
 
-**Team:** `list_users`, `list_project_assignments`, `assign_user_to_project`, `unassign_user_from_project`
+**Team (official MCP):** `list_users`, `list_project_assignments`, `assign_user_to_project`, `unassign_user_from_project`
+
+**Assignment rates (same harvest-rest stdio server):** `update_project_user_assignment` — official create/assign cannot set `use_default_rates` / `hourly_rate`. See `harvest-rates-and-assignments`.
 
 ## Intents → tools
 
@@ -28,7 +30,8 @@ Requires the Harvest MCP (`use-harvest-mcp` for auth and permissions).
 | Detach task from project | `remove_task_from_project` |
 | Who’s on the account | `list_users` |
 | Who’s on projects | `list_project_assignments` |
-| Assign / unassign | `assign_user_to_project` / `unassign_user_from_project` |
+| Assign / unassign | `assign_user_to_project` / `unassign_user_from_project` (official; ids only) |
+| Set assignment hourly rate | `update_project_user_assignment` on **harvest-rest** (`use_default_rates` / `uses_default_rate` + `hourly_rate`) |
 
 ## Workflow tips
 
@@ -37,6 +40,7 @@ Requires the Harvest MCP (`use-harvest-mcp` for auth and permissions).
 3. Mutating creates/updates/assignments only with clear user intent; summarize what will change first when the request is ambiguous.
 4. Budget questions: call `get_project_budget` and report returned figures; do not estimate from memory.
 5. Team changes may require admin/manager permissions — if denied, say so and stop.
+6. Official `assign_user_to_project` accepts only `project_id` + `user_id`. After assigning, call harvest-rest `update_project_user_assignment` with the **user assignment id** to set `use_default_rates` / `uses_default_rate` and `hourly_rate`.
 
 ## Do not
 

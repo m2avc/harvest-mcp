@@ -5,7 +5,7 @@
 Agent Plugin that connects [Harvest](https://www.getharvest.com/) through:
 
 1. **Harvest’s official remote MCP** at `https://api.harvestapp.com/mcp` (`streamable-http`) — OAuth, 35 tools.
-2. **This plugin’s `harvest-rest` stdio server** — Harvest API v2 invoice update/delete, invoice messages (including send), invoice payments, and a minimal contacts list for recipients.
+2. **This plugin’s `harvest-rest` stdio server** (`servers/harvest-rest`) — Harvest API v2 invoice update/delete, messages, payments, user billable rates, and project assignment hourly rates. **One** stdio REST entrypoint.
 
 This is community packaging by M2 AV Consulting, LLC. It is **not** an official Harvest Inc listing.
 
@@ -13,7 +13,7 @@ This is community packaging by M2 AV Consulting, LLC. It is **not** an official 
 
 1. Install this plugin (Marketplace, cursor.directory, or local `~/.cursor/plugins/local/harvest-mcp`).
 2. Complete Harvest **OAuth** when the host prompts you for the official remote MCP. Do not paste personal access tokens into chat or into this repo.
-3. For **invoice update / send / payments**, set these environment variables on the host (inherited by the stdio server). Do not put secrets in `mcp.json` (that file is public package data):
+3. For **harvest-rest** (invoices + rates), set these environment variables on the host (inherited by the stdio server). Do not put secrets in `mcp.json` (that file is public package data):
 
    - `HARVEST_ACCESS_TOKEN` — Harvest personal access token or OAuth access token
    - `HARVEST_ACCOUNT_ID` — numeric Harvest account ID
@@ -50,6 +50,8 @@ Plugin `mcp.json` uses Agent Plugins schema (`streamable-http` + `stdio`).
 - `Invoice = { id, client, state, line_items, amounts }`
 - `InvoiceMessage = { id, event_type, recipients, subject, body }`
 - `InvoicePayment = { id, amount, paid_at, paid_date, notes }`
+- `BillableRate = { id, amount, start_date, end_date }`
+- `UserAssignment = { id, project, user, use_default_rates, hourly_rate }`
 
 Official MCP **creates drafts**. Sending, closing, reopening, updating, deleting, and recording payments are on **harvest-rest**. Never claim an invoice was sent unless `create_invoice_message` succeeded.
 
@@ -62,6 +64,7 @@ Official MCP **creates drafts**. Sending, closing, reopening, updating, deleting
 | `harvest-projects-clients-tasks` | Clients, projects, tasks, budgets, team assignments |
 | `harvest-expenses` | Expense categories, list/get/create/update expenses |
 | `harvest-invoices` | List/get/create drafts (official MCP); update/delete, messages, payments (`harvest-rest`) |
+| `harvest-rates-and-assignments` | User billable rates + assignment `use_default_rates` / `hourly_rate` (`harvest-rest`) |
 
 ## Official remote MCP tools (35)
 
@@ -91,14 +94,20 @@ Invoices: `list_invoices`, `get_invoice`, `create_invoice`, `create_invoice_from
 | `create_invoice_payment` | `POST /v2/invoices/{INVOICE_ID}/payments` (notes preserved verbatim) |
 | `delete_invoice_payment` | `DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}` |
 | `list_contacts` | `GET /v2/contacts` (recipient lookup only) |
+| `list_user_billable_rates` | `GET /v2/users/{USER_ID}/billable_rates` |
+| `get_user_billable_rate` | `GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}` |
+| `create_user_billable_rate` | `POST /v2/users/{USER_ID}/billable_rates` |
+| `update_project_user_assignment` | `PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}` |
 
-See `skills/use-harvest-mcp/SKILL.md` for the full map and remaining gaps.
+Official `assign_user_to_project` accepts **only** `project_id` + `user_id`. Set rates with `update_project_user_assignment` (`use_default_rates` / `uses_default_rate` + `hourly_rate`).
+
+See `skills/use-harvest-mcp/SKILL.md` and `servers/harvest-rest/COS-RUNBOOK.md`.
 
 ## What this is / isn’t
 
 | | |
 | --- | --- |
-| **Is** | Official Harvest MCP URL + a small REST stdio server for documented API v2 invoice gaps |
+| **Is** | Official Harvest MCP URL + one REST stdio server for documented API v2 invoice and rate gaps |
 | **Isn’t** | A Cursor Marketplace “official Harvest” listing by Harvest Inc |
 | **Isn’t** | A full Harvest REST reimplementation (timers, projects, expenses stay on the official MCP) |
 | **Isn’t** | Company-specific invoicing procedures or private client data |
@@ -110,7 +119,7 @@ See `skills/use-harvest-mcp/SKILL.md` for the full map and remaining gaps.
 
 ## Extending the REST server
 
-Further official-MCP gaps (for example billable rates) should be added to `servers/harvest-rest/` — one stdio entrypoint — not a second server package.
+Further official-MCP gaps should be added to `servers/harvest-rest/` — one stdio entrypoint — not a second server package.
 
 ## Author
 

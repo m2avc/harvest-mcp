@@ -30,6 +30,8 @@ Organize work around what tools return (do not invent values):
 - `Invoice = { id, client, state, line_items, amounts }`
 - `InvoiceMessage = { id, event_type, recipients, subject, body }`
 - `InvoicePayment = { id, amount, paid_at, paid_date, notes }`
+- `BillableRate = { id, amount, start_date, end_date }`
+- `UserAssignment = { id, use_default_rates, hourly_rate }`
 
 Call tools and report what they return. Do not invent IDs, hours, or invoice totals.
 
@@ -107,16 +109,16 @@ Skill: `harvest-timers-and-time`
 
 Skill: `harvest-projects-clients-tasks`
 
-### Team (4)
+### Team (4 official)
 
 | Tool | Intent |
 | --- | --- |
 | `list_users` | List users in the account |
-| `list_project_assignments` | List who is assigned to projects |
-| `assign_user_to_project` | Assign a user to a project |
+| `list_project_assignments` | List who is assigned; may include `uses_default_rate` + `billable_rate` |
+| `assign_user_to_project` | Assign a user (`project_id` + `user_id` only — **no rate fields**) |
 | `unassign_user_from_project` | Remove a user from a project |
 
-Skill: `harvest-projects-clients-tasks` (team section)
+Skills: `harvest-projects-clients-tasks`, `harvest-rates-and-assignments`
 
 ### Expenses (5)
 
@@ -157,6 +159,12 @@ Skill: `harvest-invoices`
 | `create_invoice_payment` | Record a payment; **preserve `notes` verbatim** |
 | `delete_invoice_payment` | Delete a payment |
 | `list_contacts` | Resolve recipient name/email (`client_id` filter) |
+| `list_user_billable_rates` | GET user default billable rates |
+| `get_user_billable_rate` | GET one billable rate (API v2 supports retrieve) |
+| `create_user_billable_rate` | POST a user billable rate |
+| `update_project_user_assignment` | PATCH assignment `use_default_rates` / `uses_default_rate` + `hourly_rate` |
+
+These four rate tools live on the **same** `servers/harvest-rest` stdio server as the invoice tools. Do not add a second stdio server.
 
 ## Known gaps
 
@@ -164,7 +172,6 @@ Still not on official remote MCP or this P0 REST server:
 
 - Invoice **PDF** binary download (public client URL may still be derived from `client_key` on a retrieved invoice).
 - Estimates, retainers (beyond invoice `estimate_id` / `retainer_id` fields), recurring invoice admin.
-- Billable **rates** and other non-invoice REST resources — if a parallel rates PR exists, rebase onto / merge with the same `servers/harvest-rest` package rather than adding a second stdio server.
 - If a needed capability is missing, use official `submit_feedback` rather than inventing a workaround that mutates data incorrectly.
 
 ## Do not
@@ -173,4 +180,5 @@ Still not on official remote MCP or this P0 REST server:
 - Claim an invoice was sent, emailed, or paid without a successful tool result
 - Rewrite payment `notes` (pass the user’s text character-for-character)
 - Fabricate time, expense, or invoice data when a tool fails
-- Thin coverage — prefer the mapped official tool for timers/projects/expenses, and `harvest-rest` for invoice mutations listed above
+- Thin coverage — prefer the mapped official tool for timers/projects/expenses, and `harvest-rest` for invoice mutations and rate tools listed above
+- Add a second stdio REST server — extend `servers/harvest-rest` instead
