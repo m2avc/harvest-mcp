@@ -2,9 +2,26 @@
 
 Keep PRs **draft** until Harvest CoS smoke passes. Never email a real client invoice. Never `event_type=send` on a live client invoice without **Mike GO**.
 
-**This PR (#2) live bar:** list rates / verify **Chad $145**, then **Arabella** assignment rates. Do not invent last names, project names, or client names.
+**Stacked PR #2 live bar (unchanged):** list rates / verify **Chad $145**, then **Arabella** assignment rates. Do not invent last names, project names, or client names.
 
 Sister PR #1 invoice bar (same server, later or separately): throwaway draft + `update_invoice` + `create_invoice_payment` notes. Not required to merge rates.
+
+This compliance PR is **client reliability + gap matrix only**. It does not add domain tools. Do not undraft #1/#2 from here.
+
+## Official API v2 client rules
+
+Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/) and [Authentication](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/):
+
+- Every request sends `Authorization: Bearer …`, `Harvest-Account-Id`, and a **User-Agent** with the **integration** name plus author contact (link or email). Missing UA → `400`. Do **not** set UA from the end customer's Harvest email or company.
+- Default marketplace UA: `m2avc-harvest-mcp/<version> (mn@m2avc.com)`. CoS leaning **mn@**; `support@m2avc.com` is the alternate if Mike flips. Override with `HARVEST_USER_AGENT` (e.g. `harvest-cos-smoke (you@example.com)`).
+- Account identity is **Harvest-Account-Id + token** only.
+- GET parameters go in the query string. POST/PATCH JSON bodies send `Content-Type: application/json`.
+- Statuses to expect: `200`/`201` success; `400` bad request; `403` permission; `404` missing; `422` validation (`message` / `errors`); `429` throttle; `500` Harvest error.
+- Rate limits: **100 requests / 15 seconds** general; **Reports 100 / 15 minutes**. On `429`, Harvest sends `Retry-After` (seconds). harvest-rest retries in `harvest-client.ts` when the wait is ≤ 30s; longer waits (typical for reports) are surfaced to the tool, not slept.
+- Cache when possible; abuse can block the account. Prefer official MCP for list/report reads you already have.
+- Pagination: use `links` in the JSON; do not invent `page`/`cursor` URLs. Invalid `per_page` → `422`.
+
+Full endpoint vs tool map: [`docs/API_V2_GAP_MATRIX.md`](../../docs/API_V2_GAP_MATRIX.md).
 
 ## Environment
 
@@ -14,7 +31,7 @@ Set on the **host** (Cursor MCP env or your shell). Do not put tokens in repo `m
 | --- | --- | --- |
 | `HARVEST_ACCESS_TOKEN` | yes | `Authorization: Bearer …` |
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
-| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp (support@m2avc.com)`). CoS may set `harvest-cos-smoke (you@example.com)`. |
+| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`). CoS may set `harvest-cos-smoke (you@example.com)`. |
 | `DANGEROUS_SEND` | no | Default **off**. Only `DANGEROUS_SEND=1` unlocks email send (omit `event_type`), `event_type=send`, and `send_thank_you=true`. Requires Mike GO. |
 
 Copy `servers/harvest-rest/.env.example` locally if useful. Never commit a filled `.env`.

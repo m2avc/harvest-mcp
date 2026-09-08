@@ -21431,8 +21431,11 @@ var StdioServerTransport = class {
   }
 };
 
+// src/version.ts
+var PACKAGE_VERSION = "0.2.0";
+
 // src/env.ts
-var DEFAULT_HARVEST_USER_AGENT = "m2avc-harvest-mcp (support@m2avc.com)";
+var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 var DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 var HarvestConfigError = class extends Error {
   constructor(message) {
@@ -21479,14 +21482,19 @@ function readHarvestEnv(env = process.env) {
 }
 
 // src/harvest-client.ts
+var DEFAULT_MAX_429_RETRIES = 2;
+var DEFAULT_MAX_RETRY_AFTER_MS = 3e4;
+var DEFAULT_RETRY_AFTER_MS = 1e3;
 var HarvestApiError = class extends Error {
   status;
   body;
-  constructor(status, message, body) {
+  retryAfterSeconds;
+  constructor(status, message, body, extras) {
     super(message);
     this.name = "HarvestApiError";
     this.status = status;
     this.body = body;
+    this.retryAfterSeconds = extras?.retryAfterSeconds;
   }
 };
 function joinUrl(apiBase, path) {
@@ -21508,23 +21516,78 @@ function appendQuery(url, query) {
   const encoded = params.toString();
   return encoded.length === 0 ? url : `${url}?${encoded}`;
 }
-function harvestErrorMessage(status, parsed, rawText) {
+function parseRetryAfterMs(header, nowMs = Date.now()) {
+  if (header === null || header === void 0) {
+    return void 0;
+  }
+  const trimmed = header.trim();
+  if (trimmed.length === 0) {
+    return void 0;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) * 1e3;
+  }
+  const dateMs = Date.parse(trimmed);
+  if (Number.isNaN(dateMs)) {
+    return void 0;
+  }
+  return Math.max(0, dateMs - nowMs);
+}
+function harvestStatusHint(status) {
+  switch (status) {
+    case 400:
+      return "Bad Request. Harvest requires User-Agent = integration app name + author contact link or email (https://help.getharvest.com/api-v2/introduction/overview/general/). GET parameters belong in the query string; POST/PATCH JSON bodies require Content-Type: application/json.";
+    case 403:
+      return "Forbidden. The object was found but this token's user is not allowed to perform the request.";
+    case 404:
+      return "Not Found. The object does not exist or is not visible to this token.";
+    case 422:
+      return "Unprocessable Entity. Harvest rejected the request parameters.";
+    case 429:
+      return "Throttled. General API limit is 100 requests / 15 seconds; Reports API is 100 requests / 15 minutes (https://help.getharvest.com/api-v2/introduction/overview/general/).";
+    case 500:
+      return "Harvest server error. Contact support@getharvest.com if it persists.";
+    default:
+      return "";
+  }
+}
+function harvestDetail(parsed, rawText) {
   if (parsed && typeof parsed === "object") {
     const record2 = parsed;
     if (typeof record2.message === "string" && record2.message.length > 0) {
-      return `Harvest API ${status}: ${record2.message}`;
+      return record2.message;
     }
     if (typeof record2.error === "string" && record2.error.length > 0) {
-      return `Harvest API ${status}: ${record2.error}`;
+      return record2.error;
     }
     if (record2.errors !== void 0) {
-      return `Harvest API ${status}: ${JSON.stringify(record2.errors)}`;
+      return JSON.stringify(record2.errors);
     }
   }
   if (rawText.length > 0) {
-    return `Harvest API ${status}: ${rawText}`;
+    return rawText;
   }
-  return `Harvest API ${status}`;
+  return "";
+}
+function harvestErrorMessage(status, parsed, rawText, retryAfterSeconds) {
+  const hint = harvestStatusHint(status);
+  const detail = harvestDetail(parsed, rawText);
+  const parts = [`Harvest API ${status}`];
+  if (hint.length > 0) {
+    parts.push(hint);
+  }
+  if (detail.length > 0 && !hint.includes(detail)) {
+    parts.push(detail);
+  }
+  if (retryAfterSeconds !== void 0) {
+    parts.push(`Retry-After: ${retryAfterSeconds}s`);
+  }
+  return parts.join(" ");
+}
+function defaultSleep(ms) {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
 }
 var HarvestClient = class {
   accessToken;
@@ -21532,12 +21595,25 @@ var HarvestClient = class {
   userAgent;
   apiBase;
   fetchImpl;
+  max429Retries;
+  maxRetryAfterMs;
+  defaultRetryAfterMs;
+  sleepImpl;
   constructor(options) {
+    if (options.userAgent.trim().length === 0) {
+      throw new HarvestConfigError(
+        "Harvest API v2 requires a User-Agent header with the integration application name and a contact link or email (https://help.getharvest.com/api-v2/introduction/overview/general/). Empty User-Agent returns 400."
+      );
+    }
     this.accessToken = options.accessToken;
     this.accountId = options.accountId;
     this.userAgent = options.userAgent;
     this.apiBase = options.apiBase ?? "https://api.harvestapp.com/v2";
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.max429Retries = options.max429Retries ?? DEFAULT_MAX_429_RETRIES;
+    this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS;
+    this.defaultRetryAfterMs = options.defaultRetryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
+    this.sleepImpl = options.sleepImpl ?? defaultSleep;
   }
   async request(init) {
     const url = appendQuery(joinUrl(this.apiBase, init.path), init.query);
@@ -21552,20 +21628,40 @@ var HarvestClient = class {
       headers["Content-Type"] = "application/json";
       serializedBody = JSON.stringify(init.body);
     }
-    const response = await this.fetchImpl(url, {
-      method: init.method,
-      headers,
-      body: serializedBody
-    });
-    const rawText = await response.text();
-    const parsed = parseJsonBody(rawText);
-    if (!response.ok) {
-      throw new HarvestApiError(response.status, harvestErrorMessage(response.status, parsed, rawText), parsed ?? rawText);
+    const maxAttempts = this.max429Retries + 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      const response = await this.fetchImpl(url, {
+        method: init.method,
+        headers,
+        body: serializedBody
+      });
+      const rawText = await response.text();
+      const parsed = parseJsonBody(rawText);
+      const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After")) ?? this.defaultRetryAfterMs;
+      const retryAfterSeconds = Math.ceil(retryAfterMs / 1e3);
+      if (response.status === 429 && attempt < this.max429Retries && retryAfterMs <= this.maxRetryAfterMs) {
+        await this.sleepImpl(retryAfterMs);
+        continue;
+      }
+      if (!response.ok) {
+        throw new HarvestApiError(
+          response.status,
+          harvestErrorMessage(
+            response.status,
+            parsed,
+            rawText,
+            response.status === 429 ? retryAfterSeconds : void 0
+          ),
+          parsed ?? rawText,
+          response.status === 429 ? { retryAfterSeconds } : void 0
+        );
+      }
+      if (rawText.length === 0) {
+        return { ok: true, status: response.status };
+      }
+      return parsed;
     }
-    if (rawText.length === 0) {
-      return { ok: true, status: response.status };
-    }
-    return parsed;
+    throw new HarvestApiError(429, harvestErrorMessage(429, void 0, "", void 0), void 0);
   }
 };
 function parseJsonBody(rawText) {
@@ -21584,6 +21680,23 @@ function jsonToolResult(data) {
   };
 }
 function errorToolResult(error2) {
+  if (error2 instanceof HarvestApiError) {
+    const payload = {
+      error: error2.name,
+      status: error2.status,
+      message: error2.message
+    };
+    if (error2.retryAfterSeconds !== void 0) {
+      payload.retry_after_seconds = error2.retryAfterSeconds;
+    }
+    if (error2.body !== void 0) {
+      payload.body = error2.body;
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+      isError: true
+    };
+  }
   const message = error2 instanceof Error ? error2.message : String(error2);
   return {
     content: [{ type: "text", text: message }],
@@ -22186,7 +22299,7 @@ function createLazyClient() {
 async function main() {
   const server = new McpServer({
     name: "harvest-rest",
-    version: "0.2.0"
+    version: PACKAGE_VERSION
   });
   registerHarvestRestTools(server, createLazyClient());
   const transport = new StdioServerTransport();

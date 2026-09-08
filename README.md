@@ -17,7 +17,7 @@ This is community packaging by M2 AV Consulting, LLC. It is **not** an official 
 
    - `HARVEST_ACCESS_TOKEN` — Harvest personal access token or OAuth access token
    - `HARVEST_ACCOUNT_ID` — numeric Harvest account ID
-   - `HARVEST_USER_AGENT` — optional; defaults to `m2avc-harvest-mcp (support@m2avc.com)`
+   - `HARVEST_USER_AGENT` — optional; defaults to `m2avc-harvest-mcp/<version> (mn@m2avc.com)` (integration author contact, not the end-user Harvest email). See [API v2 headers](https://help.getharvest.com/api-v2/introduction/overview/general/).
    - `DANGEROUS_SEND` — leave unset. Only `1` (plus Mike GO) unlocks emailing or `event_type=send`
 
 4. Node.js 18+ is required to run `harvest-rest`. Reload / reconnect MCP if tools do not appear.
@@ -116,6 +116,23 @@ See `skills/use-harvest-mcp/SKILL.md` and `servers/harvest-rest/COS-RUNBOOK.md`.
 
 - Official remote MCP: OAuth through the MCP host.
 - `harvest-rest`: `HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` + `User-Agent` header. Never commit tokens or Account IDs.
+
+## Harvest API v2 headers and rate limits
+
+Rules from [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/) and [Authentication](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/):
+
+| Rule | harvest-rest |
+| --- | --- |
+| `Authorization: Bearer …` | `HARVEST_ACCESS_TOKEN` |
+| `Harvest-Account-Id` | `HARVEST_ACCOUNT_ID` |
+| `User-Agent` required (app name + **author** link or email; missing → `400`) | Default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`; override `HARVEST_USER_AGENT`. Never derived from the end customer's Harvest email/company. |
+| GET params in query string; POST/PATCH JSON needs `Content-Type: application/json` | Enforced in `harvest-client.ts` |
+| Errors `400` / `403` / `404` / `422` / `429` / `500` | `HarvestApiError` with status + body (`errors` / `message`) |
+| General throttle **100 / 15s**; Reports **100 / 15min**; `429` sends `Retry-After` | Client retries short waits; long waits are returned to the tool |
+| Pagination `links`; default `per_page` max 2000 | Passed through; do not invent next-page URLs |
+| Cache when possible | No silent cache of writes; do not hammer reports |
+
+Endpoint coverage vs official MCP: [`docs/API_V2_GAP_MATRIX.md`](docs/API_V2_GAP_MATRIX.md).
 
 ## Extending the REST server
 

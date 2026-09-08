@@ -16,13 +16,17 @@ Environment only (never commit):
 | --- | --- | --- |
 | `HARVEST_ACCESS_TOKEN` | yes | `Authorization: Bearer …` |
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
-| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp (support@m2avc.com)`) |
+| `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<version> (mn@m2avc.com)`). Harvest requires the integration author contact, not the end-user email. See [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/). |
 | `HARVEST_API_BASE` | no | Override API root (tests) |
 | `DANGEROUS_SEND` | no | Must be `1` to email, `event_type=send`, or `send_thank_you=true`. Default off. Mike GO required. |
 
 Copy `.env.example` locally. Do not put tokens in plugin `mcp.json`.
 
 CoS local runbook (Cursor connect + smoke examples): [COS-RUNBOOK.md](./COS-RUNBOOK.md).
+
+API v2 endpoint vs tool map (P0/P1/P2): [docs/API_V2_GAP_MATRIX.md](../../docs/API_V2_GAP_MATRIX.md).
+
+Rate limits ([Overview](https://help.getharvest.com/api-v2/introduction/overview/general/)): **100 requests / 15 seconds** general; Reports **100 / 15 minutes**. `429` includes `Retry-After`. harvest-rest retries short waits in `src/harvest-client.ts`.
 
 ## Develop
 

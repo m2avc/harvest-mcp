@@ -1,4 +1,12 @@
-export const DEFAULT_HARVEST_USER_AGENT = "m2avc-harvest-mcp (support@m2avc.com)";
+import { PACKAGE_VERSION } from "./version.js";
+
+/**
+ * Marketplace default User-Agent. Harvest requires the *integration author*
+ * contact (app name + link or email), not the end customer's Harvest email.
+ * CoS leaning mn@m2avc.com; support@m2avc.com is the alternate if Mike flips.
+ * https://help.getharvest.com/api-v2/introduction/overview/general/
+ */
+export const DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 export const DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 
 export type HarvestEnv = {
@@ -48,6 +56,8 @@ function readTrimmed(env: NodeJS.ProcessEnv, key: string): string | undefined {
 /**
  * Reads Harvest REST credentials from the process environment.
  * Tokens must never be logged or written to repo files.
+ * Account identity is Harvest-Account-Id + token only — never derive User-Agent
+ * from an end-user Harvest email or company name.
  */
 export function readHarvestEnv(env: NodeJS.ProcessEnv = process.env): HarvestEnv {
   const accessToken = readTrimmed(env, "HARVEST_ACCESS_TOKEN");
