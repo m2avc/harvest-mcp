@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "harvest-mcp",
   "version": "0.2.0",
-  "description": "Harvest official remote MCP plus a custom REST stdio server for invoice update/delete, messages, and payments. Skills for timers, projects, expenses, and invoices. Never commit tokens.",
+  "description": "Harvest official remote MCP plus one REST stdio server for invoice update/messages/payments and user/assignment billable rates. Never commit tokens.",
   "author": {
     "name": "M2 AV Consulting, LLC",
     "email": "support@m2avc.com"

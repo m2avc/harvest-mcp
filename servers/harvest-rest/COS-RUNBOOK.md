@@ -1,8 +1,10 @@
 # Harvest CoS local runbook — harvest-rest
 
-Keep the PR **draft** until this smoke passes. Never email a real client invoice. Never `event_type=send` on a live client invoice without **Mike GO**.
+Keep PRs **draft** until Harvest CoS smoke passes. Never email a real client invoice. Never `event_type=send` on a live client invoice without **Mike GO**.
 
-Approved smoke: **throwaway draft** + `update_invoice` + `create_invoice_payment` notes round-trip. That is the whole live bar.
+**This PR (#2) live bar:** list rates / verify **Chad $145**, then **Arabella** assignment rates. Do not invent last names, project names, or client names.
+
+Sister PR #1 invoice bar (same server, later or separately): throwaway draft + `update_invoice` + `create_invoice_payment` notes. Not required to merge rates.
 
 ## Environment
 
@@ -56,11 +58,38 @@ cd servers/harvest-rest && npm test
    - Cursor Settings → MCP → `harvest-rest` → environment: `HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `HARVEST_USER_AGENT`
    - or a **user-local** `~/.cursor/mcp.json` (never commit) with the same `env` keys and `command`/`args` pointing at this repo’s `servers/harvest-rest/dist/index.js`
    - or launch Cursor from a shell that already exported those variables (host may inherit them)
-5. Confirm tools: `update_invoice`, `create_invoice_payment`, `list_invoice_payments`, `delete_invoice_payment` appear. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
+5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include `list_user_billable_rates`, `get_user_billable_rate`, `create_user_billable_rate`, `update_project_user_assignment` plus the invoice tools from PR #1. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
 
 Leave `DANGEROUS_SEND` unset.
 
-## Smoke examples (throwaway draft only)
+## Suggested CoS smoke — rates (this PR)
+
+Read-only. First names only as Harvest already used. Do **not** send invoices or client emails.
+
+### 1. Chad — default billable rate $145
+
+1. Official `list_users` → find **Chad** → note `user_id`.
+2. harvest-rest `list_user_billable_rates` `{ "user_id": <chad> }`.
+3. Pass: the current rate (`end_date` null) `amount` is **145**.
+
+Minimal tool call:
+
+```json
+{
+  "name": "list_user_billable_rates",
+  "arguments": { "user_id": 0 }
+}
+```
+
+Replace `0` with Chad’s id. Do not invent the id.
+
+### 2. Arabella — assignment rates
+
+1. Official `list_users` → find **Arabella**.
+2. Official `list_project_assignments` (and harvest-rest `update_project_user_assignment` only if you must change a rate).
+3. Report `uses_default_rate` / `use_default_rates` and `hourly_rate` / `billable_rate` as returned. Do not invent project or client names.
+
+## Smoke examples — invoices (sister PR #1, throwaway draft only)
 
 Use a draft created for this test. Confirm `state` is `draft` via official `get_invoice`. Do not use a sent/open client invoice.
 
