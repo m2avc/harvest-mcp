@@ -93,7 +93,7 @@ function toolClient(client: HarvestClient, extra: { signal: AbortSignal }): Harv
 
 /**
  * Registers Harvest REST v2 tools that the official remote MCP does not expose.
- * Invoice + rates + invoice item categories. Do not add a second stdio server.
+ * Invoice + rates + invoice item categories + read-only estimates. Do not add a second stdio server.
  */
 export function registerHarvestRestTools(server: McpServer, client: HarvestClient): void {
   server.registerTool(

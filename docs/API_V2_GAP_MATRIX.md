@@ -171,7 +171,7 @@ Line items are **not** a separate resource: create/update/`_destroy` on `POST/PA
 
 ### Estimates
 
-Entire domain missing from official MCP and harvest-rest.
+Official MCP has no estimate tools. harvest-rest adds read-only list/get. Create/update/delete/messages stay deferred.
 
 | Method | Path | REST | MCP | Priority | Status |
 | --- | --- | --- | --- | --- | --- |

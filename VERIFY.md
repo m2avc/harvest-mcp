@@ -6,7 +6,7 @@
 | Schema `mcp.json` | PASS (`harvest` streamable-http → `https://api.harvestapp.com/mcp`; `harvest-rest` stdio → `node ${PLUGIN_ROOT}/servers/harvest-rest/dist/index.js`) |
 | Skills frontmatter | PASS (`use-harvest-mcp`, `harvest-timers-and-time`, `harvest-projects-clients-tasks`, `harvest-expenses`, `harvest-invoices`, `harvest-rates-and-assignments`) |
 | Official 35-tool map | PASS (all 35 tools named in `skills/use-harvest-mcp/SKILL.md`) |
-| harvest-rest tools | PASS (P0 invoice/rates + P1 cost rates + invoice item categories) — **one** stdio server |
+| harvest-rest tools | PASS (P0 invoice/rates + P1 cost rates/categories + P2 read-only estimates) — **one** stdio server |
 | Unit tests | PASS → `cd servers/harvest-rest && npm test` (invoice + rates paths; no live creds). CI: `.github/workflows/ci.yml` on every PR. |
 | Typecheck + bundle | PASS → `npm run typecheck && npm run build` |
 | Public-safe scan | PASS (mcp.json, .env.example, COS-RUNBOOK, skills: no tokens / Account IDs / live person names / exact rates) |
@@ -42,12 +42,13 @@ Asserted without calling Harvest:
 - `delete_invoice` / `delete_invoice_message` / `delete_invoice_payment` require `confirm: true`
 - Payment `amount` finite and `> 0`; line items with `_destroy: true` require `id`; payment `inputSchema` is a plain ZodObject
 - P1: invoice item categories list/get/create; user cost rates list/get/create (mocked; no live send)
+- P2: estimates list/get (read-only; no create/send)
 
 ## Live CoS smoke (optional; do not commit tokens)
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**Stacked on PR #9 → #4:** P0 API v2 compliance + Marketplace security gate + CodeRabbit follow-ups remain on the base. This revision adds P1 invoice item categories and user cost rates on the same harvest-rest stdio server. CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag.
+**Stacked on P1 → PR #9 → #4:** P0 compliance, CodeRabbit follow-ups, and P1 categories/cost rates remain on the base. This revision adds P2 read-only `list_estimates` / `get_estimate` on the same harvest-rest stdio server. CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag.
 
 Invoice e2e (not this PR’s bar):
 
