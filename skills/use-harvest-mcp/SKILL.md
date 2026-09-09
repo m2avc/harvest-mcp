@@ -166,7 +166,7 @@ Skill: `harvest-invoices`
 | `create_user_billable_rate` | POST a user billable rate |
 | `list_user_cost_rates` | GET user cost rates |
 | `get_user_cost_rate` | GET one cost rate |
-| `create_user_cost_rate` | POST a user cost rate |
+| `create_user_cost_rate` | POST a user cost rate (Administrator only; confirm_replacement when omitting/backdating start_date) |
 | `list_invoice_item_categories` | GET invoice line-item `kind` categories |
 | `get_invoice_item_category` | GET one invoice item category |
 | `create_invoice_item_category` | POST an invoice item category |

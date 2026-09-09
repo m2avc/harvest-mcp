@@ -4,7 +4,7 @@ import type { HarvestClient } from "../harvest-client.js";
 
 export const listInvoiceItemCategoriesInputSchema = z
   .object({
-    updated_since: z.string().optional(),
+    updated_since: z.string().datetime({ offset: true }).optional(),
     page: z.coerce.number().int().positive().optional(),
     per_page: z.coerce.number().int().min(1).max(2000).optional(),
   })

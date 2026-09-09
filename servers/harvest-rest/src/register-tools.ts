@@ -240,10 +240,10 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "List user cost rates",
       description:
-        "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit cost rates.",
+        "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator permission (not Manager) to edit cost rates.",
       inputSchema: listUserCostRatesInputSchema,
     },
-    async (args) => runTool(() => listUserCostRates(client, args)),
+    async (args, extra) => runTool(() => listUserCostRates(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -254,7 +254,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
       inputSchema: getUserCostRateInputSchema,
     },
-    async (args) => runTool(() => getUserCostRate(client, args)),
+    async (args, extra) => runTool(() => getUserCostRate(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -262,10 +262,10 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "Create user cost rate",
       description:
-        "POST /v2/users/{USER_ID}/cost_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
+        "POST /v2/users/{USER_ID}/cost_rates. Administrator only (not Manager). amount is required; start_date is optional (real YYYY-MM-DD, not in the future). Omitting start_date or using a start_date earlier than an existing rate replaces rate history — requires confirm_replacement=true after explicit user confirmation.",
       inputSchema: createUserCostRateInputSchema,
     },
-    async (args) => runTool(() => createUserCostRate(client, args)),
+    async (args, extra) => runTool(() => createUserCostRate(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -276,7 +276,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/invoice_item_categories. Categories are the `kind` values used on invoice line items. Official remote MCP does not expose this.",
       inputSchema: listInvoiceItemCategoriesInputSchema,
     },
-    async (args) => runTool(() => listInvoiceItemCategories(client, args)),
+    async (args, extra) => runTool(() => listInvoiceItemCategories(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -286,7 +286,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       description: "GET /v2/invoice_item_categories/{INVOICE_ITEM_CATEGORY_ID}. Official remote MCP does not expose this.",
       inputSchema: getInvoiceItemCategoryInputSchema,
     },
-    async (args) => runTool(() => getInvoiceItemCategory(client, args)),
+    async (args, extra) => runTool(() => getInvoiceItemCategory(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -297,7 +297,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "POST /v2/invoice_item_categories. name is required; optional use_as_service / use_as_expense. Official remote MCP does not expose this.",
       inputSchema: createInvoiceItemCategoryInputSchema,
     },
-    async (args) => runTool(() => createInvoiceItemCategory(client, args)),
+    async (args, extra) => runTool(() => createInvoiceItemCategory(toolClient(client, extra), args)),
   );
 
   server.registerTool(

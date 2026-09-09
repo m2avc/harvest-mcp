@@ -22081,8 +22081,23 @@ async function createUserBillableRate(client, input) {
   });
 }
 
+// src/tools/iso-date.ts
+function utcTodayIsoDate(nowMs = Date.now()) {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+function isRealIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const date3 = new Date(Date.UTC(year, month - 1, day));
+  return date3.getUTCFullYear() === year && date3.getUTCMonth() === month - 1 && date3.getUTCDate() === day;
+}
+var isoDateSchema2 = external_exports.string().refine(isRealIsoDate, "start_date must be a real YYYY-MM-DD calendar date").refine((value) => value <= utcTodayIsoDate(), "start_date must not be in the future");
+
 // src/tools/cost-rates.ts
-var isoDateSchema2 = external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/, "start_date must be YYYY-MM-DD");
 var listUserCostRatesInputSchema = external_exports.object({
   user_id: external_exports.coerce.number().int().positive(),
   page: external_exports.coerce.number().int().positive().optional(),
@@ -22095,7 +22110,8 @@ var getUserCostRateInputSchema = external_exports.object({
 var createUserCostRateInputSchema = external_exports.object({
   user_id: external_exports.coerce.number().int().positive(),
   amount: external_exports.number(),
-  start_date: isoDateSchema2.optional()
+  start_date: isoDateSchema2.optional(),
+  confirm_replacement: external_exports.literal(true).optional()
 }).strict();
 function buildCreateCostRateBody(input) {
   const body = { amount: input.amount };
@@ -22103,6 +22119,43 @@ function buildCreateCostRateBody(input) {
     body.start_date = input.start_date;
   }
   return body;
+}
+function existingCostRateStartDates(listed) {
+  if (!listed || typeof listed !== "object") {
+    return [];
+  }
+  const rates = listed.cost_rates;
+  if (!Array.isArray(rates)) {
+    return [];
+  }
+  const starts = [];
+  for (const rate of rates) {
+    if (!rate || typeof rate !== "object") {
+      continue;
+    }
+    const start = rate.start_date;
+    if (typeof start === "string" && start.length > 0) {
+      starts.push(start);
+    }
+  }
+  return starts;
+}
+function isCostRateReplacement(startDate, existingStartDates) {
+  if (startDate === void 0) {
+    return true;
+  }
+  return existingStartDates.some((existing) => startDate < existing);
+}
+function assertCostRateReplacementAcknowledged(input, existingStartDates) {
+  if (!isCostRateReplacement(input.start_date, existingStartDates)) {
+    return;
+  }
+  if (input.confirm_replacement === true) {
+    return;
+  }
+  throw new HarvestConfigError(
+    "create_user_cost_rate would replace existing rate(s). Pass confirm_replacement=true after explicit user confirmation. Omitting start_date replaces all rates; a start_date earlier than an existing rate backdates over it."
+  );
 }
 async function listUserCostRates(client, input) {
   return client.request({
@@ -22121,6 +22174,12 @@ async function getUserCostRate(client, input) {
   });
 }
 async function createUserCostRate(client, input) {
+  if (input.start_date === void 0) {
+    assertCostRateReplacementAcknowledged(input, []);
+  } else {
+    const listed = await listUserCostRates(client, { user_id: input.user_id, per_page: 2e3 });
+    assertCostRateReplacementAcknowledged(input, existingCostRateStartDates(listed));
+  }
   return client.request({
     method: "POST",
     path: `/users/${input.user_id}/cost_rates`,
@@ -22130,7 +22189,7 @@ async function createUserCostRate(client, input) {
 
 // src/tools/invoice-item-categories.ts
 var listInvoiceItemCategoriesInputSchema = external_exports.object({
-  updated_since: external_exports.string().optional(),
+  updated_since: external_exports.string().datetime({ offset: true }).optional(),
   page: external_exports.coerce.number().int().positive().optional(),
   per_page: external_exports.coerce.number().int().min(1).max(2e3).optional()
 }).strict();
@@ -22482,10 +22541,10 @@ function registerHarvestRestTools(server, client) {
     "list_user_cost_rates",
     {
       title: "List user cost rates",
-      description: "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit cost rates.",
+      description: "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator permission (not Manager) to edit cost rates.",
       inputSchema: listUserCostRatesInputSchema
     },
-    async (args) => runTool(() => listUserCostRates(client, args))
+    async (args, extra) => runTool(() => listUserCostRates(toolClient(client, extra), args))
   );
   server.registerTool(
     "get_user_cost_rate",
@@ -22494,16 +22553,16 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
       inputSchema: getUserCostRateInputSchema
     },
-    async (args) => runTool(() => getUserCostRate(client, args))
+    async (args, extra) => runTool(() => getUserCostRate(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_user_cost_rate",
     {
       title: "Create user cost rate",
-      description: "POST /v2/users/{USER_ID}/cost_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
+      description: "POST /v2/users/{USER_ID}/cost_rates. Administrator only (not Manager). amount is required; start_date is optional (real YYYY-MM-DD, not in the future). Omitting start_date or using a start_date earlier than an existing rate replaces rate history \u2014 requires confirm_replacement=true after explicit user confirmation.",
       inputSchema: createUserCostRateInputSchema
     },
-    async (args) => runTool(() => createUserCostRate(client, args))
+    async (args, extra) => runTool(() => createUserCostRate(toolClient(client, extra), args))
   );
   server.registerTool(
     "list_invoice_item_categories",
@@ -22512,7 +22571,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoice_item_categories. Categories are the `kind` values used on invoice line items. Official remote MCP does not expose this.",
       inputSchema: listInvoiceItemCategoriesInputSchema
     },
-    async (args) => runTool(() => listInvoiceItemCategories(client, args))
+    async (args, extra) => runTool(() => listInvoiceItemCategories(toolClient(client, extra), args))
   );
   server.registerTool(
     "get_invoice_item_category",
@@ -22521,7 +22580,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoice_item_categories/{INVOICE_ITEM_CATEGORY_ID}. Official remote MCP does not expose this.",
       inputSchema: getInvoiceItemCategoryInputSchema
     },
-    async (args) => runTool(() => getInvoiceItemCategory(client, args))
+    async (args, extra) => runTool(() => getInvoiceItemCategory(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_invoice_item_category",
@@ -22530,7 +22589,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/invoice_item_categories. name is required; optional use_as_service / use_as_expense. Official remote MCP does not expose this.",
       inputSchema: createInvoiceItemCategoryInputSchema
     },
-    async (args) => runTool(() => createInvoiceItemCategory(client, args))
+    async (args, extra) => runTool(() => createInvoiceItemCategory(toolClient(client, extra), args))
   );
   server.registerTool(
     "update_project_user_assignment",

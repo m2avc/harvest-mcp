@@ -6,6 +6,7 @@ import {
   createInvoiceItemCategory,
   getInvoiceItemCategory,
   listInvoiceItemCategories,
+  listInvoiceItemCategoriesInputSchema,
 } from "../src/tools/invoice-item-categories.js";
 import { createMockClient } from "./helpers.js";
 
@@ -42,5 +43,10 @@ describe("invoice item categories", () => {
 
   it("omits unset flags from the create body", () => {
     assert.deepEqual(buildCreateInvoiceItemCategoryBody({ name: "Service" }), { name: "Service" });
+  });
+
+  it("rejects updated_since that is not an ISO datetime", () => {
+    const parsed = listInvoiceItemCategoriesInputSchema.safeParse({ updated_since: "not-a-date" });
+    assert.equal(parsed.success, false);
   });
 });
