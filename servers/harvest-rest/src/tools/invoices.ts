@@ -17,7 +17,16 @@ export const invoiceLineItemSchema = z
     taxed2: z.boolean().optional(),
     _destroy: z.boolean().optional(),
   })
-  .strict();
+  .strict()
+  .superRefine((item, ctx) => {
+    if (item._destroy === true && item.id === undefined) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Line items with _destroy=true must include a valid id.",
+        path: ["id"],
+      });
+    }
+  });
 
 export const updateInvoiceInputSchema = z
   .object({
@@ -44,6 +53,7 @@ export const updateInvoiceInputSchema = z
 export const deleteInvoiceInputSchema = z
   .object({
     invoice_id: z.coerce.number().int().positive(),
+    confirm: z.literal(true),
   })
   .strict();
 

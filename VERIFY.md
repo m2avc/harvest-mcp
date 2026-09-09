@@ -38,12 +38,15 @@ Asserted without calling Harvest:
 - `GET/POST /v2/users/{id}/billable_rates` and GET-by-id
 - `PATCH /v2/projects/{id}/user_assignments/{id}` maps `uses_default_rate` → `use_default_rates`
 - Default User-Agent `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`; `HARVEST_USER_AGENT` override; 429 `Retry-After` retry; 4xx/5xx mapping (no token leak)
+- `fetchWithTimeout` (default 30s; `timeoutMs: 0` disables) wraps **each** 429 retry attempt
+- `delete_invoice` / `delete_invoice_message` / `delete_invoice_payment` require `confirm: true`
+- Payment `amount` finite and `> 0`; line items with `_destroy: true` require `id`; payment `inputSchema` is a plain ZodObject
 
 ## Live CoS smoke (optional; do not commit tokens)
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**This PR (#4):** P0 API v2 compliance + Marketplace security gate (CI, PR template, COS-RUNBOOK). CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset. No client email. **Mike human GO** before Marketplace publish or a public version tag.
+**Stacked on PR #4:** P0 API v2 compliance + Marketplace security gate remain on the base. This revision ports still-valid CodeRabbit findings (timeouts, delete confirm, payment/schema hardening, skill shape). CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag.
 
 Invoice e2e (not this PR’s bar):
 
