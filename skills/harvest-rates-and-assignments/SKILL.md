@@ -46,10 +46,11 @@ Official remote MCP OAuth does **not** authenticate harvest-rest. CoS connect st
 
 ## Suggested live smoke (Harvest CoS)
 
-Read-only unless asked to change a rate. Do **not** send invoices or client invoice emails.
+Read-only unless asked to change a rate. Do **not** send invoices or client invoice emails. Full pre-publish matrix (all 22 harvest-rest tools): `servers/harvest-rest/COS-RUNBOOK.md`.
 
-1. Operator-supplied user id — `list_user_billable_rates`. Current default (`end_date` null) amount should match the operator-supplied expected amount.
-2. Operator-supplied user id — assignment rates via official `list_project_assignments`. Report returned fields; do not invent project or client names.
+1. Operator-supplied user id — `list_user_billable_rates` then `get_user_billable_rate` (id from the list). Current default (`end_date` null) amount should match the operator-supplied expected amount.
+2. Same user id — `list_user_cost_rates` then `get_user_cost_rate` (id from the list). Administrator only. Do not publish amounts.
+3. Assignment rates via official `list_project_assignments`. Report returned fields; do not invent project or client names. Do not call `update_project_user_assignment` or `create_user_billable_rate` in default smoke.
 
 ## Do not
 
