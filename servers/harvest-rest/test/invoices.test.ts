@@ -49,6 +49,17 @@ describe("update_invoice", () => {
     );
     assert.deepEqual(body, { notes: "Only notes" });
   });
+
+  it("preserves multi-line invoice notes character-for-character", async () => {
+    const notes = "  COS smoke — keep  verbatim\n\t#ref  ";
+    const { client, requests } = createMockClient({
+      responseBody: { id: 9, notes },
+    });
+    await updateInvoice(client, updateInvoiceInputSchema.parse({ invoice_id: 9, notes }));
+    const sent = requests[0]?.bodyJson as { notes: string };
+    assert.equal(sent.notes, notes);
+    assert.notEqual(sent.notes, sent.notes.trim());
+  });
 });
 
 describe("delete_invoice", () => {

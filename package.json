@@ -1,0 +1,6 @@
+{
+  "name": "m2avc-harvest-mcp",
+  "version": "0.2.0",
+  "private": true,
+  "description": "Marketplace plugin semver — single source of truth for harvest-rest User-Agent (m2avc-harvest-mcp/<semver> (mn@m2avc.com)). Keep plugin.json and servers/harvest-rest/package.json versions equal. Never put tokens here."
+}

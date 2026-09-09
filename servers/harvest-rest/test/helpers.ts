@@ -16,13 +16,27 @@ export type RecordedRequest = {
   bodyJson: unknown;
 };
 
-export function createMockClient(options?: {
+export type MockResponseSpec = {
   status?: number;
   responseBody?: unknown;
   responseText?: string;
-}): { client: HarvestClient; requests: RecordedRequest[] } {
+  responseHeaders?: Record<string, string>;
+};
+
+export function createMockClient(options?: MockResponseSpec & {
+  responses?: MockResponseSpec[];
+  sleepImpl?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  userAgent?: string;
+  max429Retries?: number;
+  maxRetryAfterMs?: number;
+  defaultRetryAfterMs?: number;
+  timeoutMs?: number;
+}): { client: HarvestClient; requests: RecordedRequest[]; sleeps: number[] } {
   const requests: RecordedRequest[] = [];
-  const status = options?.status ?? 200;
+  const sleeps: number[] = [];
+  const queued = options?.responses === undefined ? undefined : [...options.responses];
+  const fallbackStatus = options?.status ?? 200;
+
   const fetchImpl: typeof fetch = async (input, init) => {
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
     const headers = Object.fromEntries(new Headers(init?.headers).entries());
@@ -35,26 +49,42 @@ export function createMockClient(options?: {
       bodyJson: bodyText === undefined ? undefined : JSON.parse(bodyText),
     });
 
+    const spec = queued?.shift() ?? {
+      status: fallbackStatus,
+      responseBody: options?.responseBody,
+      responseText: options?.responseText,
+      responseHeaders: options?.responseHeaders,
+    };
+
     const text =
-      options?.responseText !== undefined
-        ? options.responseText
-        : options?.responseBody === undefined
+      spec.responseText !== undefined
+        ? spec.responseText
+        : spec.responseBody === undefined
           ? ""
-          : JSON.stringify(options.responseBody);
+          : JSON.stringify(spec.responseBody);
 
     return new Response(text, {
-      status,
-      headers: { "Content-Type": "application/json" },
+      status: spec.status ?? 200,
+      headers: { "Content-Type": "application/json", ...spec.responseHeaders },
     });
   };
 
   const client = new HarvestClient({
     accessToken: "test-token",
     accountId: "123456",
-    userAgent: "harvest-rest-tests (test@example.com)",
+    userAgent: options?.userAgent ?? "harvest-rest-tests (test@example.com)",
     apiBase: "https://api.harvestapp.com/v2",
     fetchImpl,
+    sleepImpl:
+      options?.sleepImpl ??
+      (async (ms: number) => {
+        sleeps.push(ms);
+      }),
+    max429Retries: options?.max429Retries,
+    maxRetryAfterMs: options?.maxRetryAfterMs,
+    defaultRetryAfterMs: options?.defaultRetryAfterMs,
+    timeoutMs: options?.timeoutMs,
   });
 
-  return { client, requests };
+  return { client, requests, sleeps };
 }

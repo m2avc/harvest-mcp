@@ -4,6 +4,7 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { readHarvestEnv } from "./env.js";
 import { HarvestClient, type HarvestRequestInit } from "./harvest-client.js";
 import { registerHarvestRestTools } from "./register-tools.js";
+import { PACKAGE_VERSION } from "./version.js";
 
 function createLazyClient(): HarvestClient {
   let inner: HarvestClient | undefined;
@@ -30,7 +31,7 @@ function createLazyClient(): HarvestClient {
 async function main(): Promise<void> {
   const server = new McpServer({
     name: "harvest-rest",
-    version: "0.2.0",
+    version: PACKAGE_VERSION,
   });
 
   registerHarvestRestTools(server, createLazyClient());

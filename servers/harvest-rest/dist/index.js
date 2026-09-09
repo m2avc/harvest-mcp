@@ -21431,8 +21431,19 @@ var StdioServerTransport = class {
   }
 };
 
+// ../../package.json
+var package_default = {
+  name: "m2avc-harvest-mcp",
+  version: "0.2.0",
+  private: true,
+  description: "Marketplace plugin semver \u2014 single source of truth for harvest-rest User-Agent (m2avc-harvest-mcp/<semver> (mn@m2avc.com)). Keep plugin.json and servers/harvest-rest/package.json versions equal. Never put tokens here."
+};
+
+// src/version.ts
+var PACKAGE_VERSION = package_default.version;
+
 // src/env.ts
-var DEFAULT_HARVEST_USER_AGENT = "m2avc-harvest-mcp (support@m2avc.com)";
+var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 var DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 var HarvestConfigError = class extends Error {
   constructor(message) {
@@ -21479,14 +21490,108 @@ function readHarvestEnv(env = process.env) {
 }
 
 // src/harvest-client.ts
+var DEFAULT_MAX_429_RETRIES = 2;
+var DEFAULT_MAX_RETRY_AFTER_MS = 3e4;
+var DEFAULT_RETRY_AFTER_MS = 1e3;
+var DEFAULT_TIMEOUT_MS = 3e4;
+function isAbortError(error2) {
+  return error2 instanceof Error && (error2.name === "AbortError" || error2.name === "TimeoutError");
+}
+function abortError(message = "The operation was aborted") {
+  const error2 = new Error(message);
+  error2.name = "AbortError";
+  return error2;
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw abortError();
+  }
+}
+function abortableSleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+async function fetchWithTimeout(fetchImpl, url, init, timeoutMs) {
+  const external = init.signal ?? void 0;
+  const useTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0;
+  if (!useTimeout && external === void 0) {
+    const response = await fetchImpl(url, init);
+    const rawText = await response.text();
+    return { response, rawText };
+  }
+  const controller = new AbortController();
+  const onExternalAbort = () => {
+    controller.abort();
+  };
+  if (external !== void 0) {
+    if (external.aborted) {
+      controller.abort();
+    } else {
+      external.addEventListener("abort", onExternalAbort);
+    }
+  }
+  let timer;
+  if (useTimeout) {
+    timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+  }
+  try {
+    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const rawText = await response.text();
+    return { response, rawText };
+  } catch (error2) {
+    if (isAbortError(error2)) {
+      if (external?.aborted) {
+        throw abortError();
+      }
+      throw new Error(`Harvest API request timed out after ${timeoutMs}ms`);
+    }
+    throw error2;
+  } finally {
+    if (timer !== void 0) {
+      clearTimeout(timer);
+    }
+    external?.removeEventListener("abort", onExternalAbort);
+  }
+}
+function bindRequestSignal(client, signal) {
+  if (signal === void 0) {
+    return client;
+  }
+  return {
+    request(init) {
+      return client.request({ ...init, signal: init.signal ?? signal });
+    }
+  };
+}
 var HarvestApiError = class extends Error {
   status;
   body;
-  constructor(status, message, body) {
+  retryAfterSeconds;
+  constructor(status, message, body, extras) {
     super(message);
     this.name = "HarvestApiError";
     this.status = status;
     this.body = body;
+    this.retryAfterSeconds = extras?.retryAfterSeconds;
   }
 };
 function joinUrl(apiBase, path) {
@@ -21508,23 +21613,73 @@ function appendQuery(url, query) {
   const encoded = params.toString();
   return encoded.length === 0 ? url : `${url}?${encoded}`;
 }
-function harvestErrorMessage(status, parsed, rawText) {
+function parseRetryAfterMs(header, nowMs = Date.now()) {
+  if (header === null || header === void 0) {
+    return void 0;
+  }
+  const trimmed = header.trim();
+  if (trimmed.length === 0) {
+    return void 0;
+  }
+  if (/^\d+$/.test(trimmed)) {
+    return Number(trimmed) * 1e3;
+  }
+  const dateMs = Date.parse(trimmed);
+  if (Number.isNaN(dateMs)) {
+    return void 0;
+  }
+  return Math.max(0, dateMs - nowMs);
+}
+function harvestStatusHint(status) {
+  switch (status) {
+    case 400:
+      return "Bad Request. Harvest requires User-Agent = integration app name + author contact link or email (https://help.getharvest.com/api-v2/introduction/overview/general/). GET parameters belong in the query string; POST/PATCH JSON bodies require Content-Type: application/json.";
+    case 403:
+      return "Forbidden. The object was found but this token's user is not allowed to perform the request.";
+    case 404:
+      return "Not Found. The object does not exist or is not visible to this token.";
+    case 422:
+      return "Unprocessable Entity. Harvest rejected the request parameters.";
+    case 429:
+      return "Throttled. General API limit is 100 requests / 15 seconds; Reports API is 100 requests / 15 minutes (https://help.getharvest.com/api-v2/introduction/overview/general/).";
+    case 500:
+      return "Harvest server error. Contact support@getharvest.com if it persists.";
+    default:
+      return "";
+  }
+}
+function harvestDetail(parsed, rawText) {
   if (parsed && typeof parsed === "object") {
     const record2 = parsed;
     if (typeof record2.message === "string" && record2.message.length > 0) {
-      return `Harvest API ${status}: ${record2.message}`;
+      return record2.message;
     }
     if (typeof record2.error === "string" && record2.error.length > 0) {
-      return `Harvest API ${status}: ${record2.error}`;
+      return record2.error;
     }
     if (record2.errors !== void 0) {
-      return `Harvest API ${status}: ${JSON.stringify(record2.errors)}`;
+      return JSON.stringify(record2.errors);
     }
   }
   if (rawText.length > 0) {
-    return `Harvest API ${status}: ${rawText}`;
+    return rawText;
   }
-  return `Harvest API ${status}`;
+  return "";
+}
+function harvestErrorMessage(status, parsed, rawText, retryAfterSeconds) {
+  const hint = harvestStatusHint(status);
+  const detail = harvestDetail(parsed, rawText);
+  const parts = [`Harvest API ${status}`];
+  if (hint.length > 0) {
+    parts.push(hint);
+  }
+  if (detail.length > 0 && !hint.includes(detail)) {
+    parts.push(detail);
+  }
+  if (retryAfterSeconds !== void 0) {
+    parts.push(`Retry-After: ${retryAfterSeconds}s`);
+  }
+  return parts.join(" ");
 }
 var HarvestClient = class {
   accessToken;
@@ -21532,14 +21687,30 @@ var HarvestClient = class {
   userAgent;
   apiBase;
   fetchImpl;
+  max429Retries;
+  maxRetryAfterMs;
+  defaultRetryAfterMs;
+  sleepImpl;
+  timeoutMs;
   constructor(options) {
+    if (options.userAgent.trim().length === 0) {
+      throw new HarvestConfigError(
+        "Harvest API v2 requires a User-Agent header with the integration application name and a contact link or email (https://help.getharvest.com/api-v2/introduction/overview/general/). Empty User-Agent returns 400."
+      );
+    }
     this.accessToken = options.accessToken;
     this.accountId = options.accountId;
     this.userAgent = options.userAgent;
     this.apiBase = options.apiBase ?? "https://api.harvestapp.com/v2";
     this.fetchImpl = options.fetchImpl ?? fetch;
+    this.max429Retries = options.max429Retries ?? DEFAULT_MAX_429_RETRIES;
+    this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS;
+    this.defaultRetryAfterMs = options.defaultRetryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
+    this.sleepImpl = options.sleepImpl ?? abortableSleep;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
   async request(init) {
+    throwIfAborted(init.signal);
     const url = appendQuery(joinUrl(this.apiBase, init.path), init.query);
     const headers = {
       Authorization: `Bearer ${this.accessToken}`,
@@ -21552,20 +21723,48 @@ var HarvestClient = class {
       headers["Content-Type"] = "application/json";
       serializedBody = JSON.stringify(init.body);
     }
-    const response = await this.fetchImpl(url, {
-      method: init.method,
-      headers,
-      body: serializedBody
-    });
-    const rawText = await response.text();
-    const parsed = parseJsonBody(rawText);
-    if (!response.ok) {
-      throw new HarvestApiError(response.status, harvestErrorMessage(response.status, parsed, rawText), parsed ?? rawText);
+    const maxAttempts = this.max429Retries + 1;
+    for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
+      throwIfAborted(init.signal);
+      const { response, rawText } = await fetchWithTimeout(
+        this.fetchImpl,
+        url,
+        {
+          method: init.method,
+          headers,
+          body: serializedBody,
+          signal: init.signal
+        },
+        this.timeoutMs
+      );
+      const parsed = parseJsonBody(rawText);
+      const headerRetryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+      const retryAfterMs = headerRetryAfterMs ?? this.defaultRetryAfterMs;
+      const retryAfterSeconds = headerRetryAfterMs === void 0 ? void 0 : Math.ceil(headerRetryAfterMs / 1e3);
+      if (response.status === 429 && attempt < this.max429Retries && retryAfterMs <= this.maxRetryAfterMs) {
+        await this.sleepImpl(retryAfterMs, init.signal);
+        continue;
+      }
+      if (!response.ok) {
+        const extras = response.status === 429 && retryAfterSeconds !== void 0 ? { retryAfterSeconds } : void 0;
+        throw new HarvestApiError(
+          response.status,
+          harvestErrorMessage(
+            response.status,
+            parsed,
+            rawText,
+            response.status === 429 ? retryAfterSeconds : void 0
+          ),
+          parsed ?? rawText,
+          extras
+        );
+      }
+      if (rawText.length === 0) {
+        return { ok: true, status: response.status };
+      }
+      return parsed;
     }
-    if (rawText.length === 0) {
-      return { ok: true, status: response.status };
-    }
-    return parsed;
+    throw new HarvestApiError(429, harvestErrorMessage(429, void 0, "", void 0), void 0);
   }
 };
 function parseJsonBody(rawText) {
@@ -21584,6 +21783,23 @@ function jsonToolResult(data) {
   };
 }
 function errorToolResult(error2) {
+  if (error2 instanceof HarvestApiError) {
+    const payload = {
+      error: error2.name,
+      status: error2.status,
+      message: error2.message
+    };
+    if (error2.retryAfterSeconds !== void 0) {
+      payload.retry_after_seconds = error2.retryAfterSeconds;
+    }
+    if (error2.body !== void 0) {
+      payload.body = error2.body;
+    }
+    return {
+      content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+      isError: true
+    };
+  }
   const message = error2 instanceof Error ? error2.message : String(error2);
   return {
     content: [{ type: "text", text: message }],
@@ -22033,6 +22249,9 @@ async function runTool(work) {
     return errorToolResult(error2);
   }
 }
+function toolClient(client, extra) {
+  return bindRequestSignal(client, extra.signal);
+}
 function registerHarvestRestTools(server, client) {
   server.registerTool(
     "update_invoice",
@@ -22041,7 +22260,7 @@ function registerHarvestRestTools(server, client) {
       description: "PATCH /v2/invoices/{INVOICE_ID}. Update invoice header fields and line items. Create a line item by omitting id; update by sending id; delete with id + _destroy=true. Official remote MCP cannot update invoices.",
       inputSchema: updateInvoiceInputSchema
     },
-    async (args) => runTool(() => updateInvoice(client, args))
+    async (args, extra) => runTool(() => updateInvoice(toolClient(client, extra), args))
   );
   server.registerTool(
     "delete_invoice",
@@ -22050,7 +22269,7 @@ function registerHarvestRestTools(server, client) {
       description: "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires clear user intent.",
       inputSchema: deleteInvoiceInputSchema
     },
-    async (args) => runTool(() => deleteInvoice(client, args.invoice_id))
+    async (args, extra) => runTool(() => deleteInvoice(toolClient(client, extra), args.invoice_id))
   );
   server.registerTool(
     "list_invoice_messages",
@@ -22059,7 +22278,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoices/{INVOICE_ID}/messages. Lists send/close/draft/re-open and email messages for an invoice.",
       inputSchema: listInvoiceMessagesInputSchema
     },
-    async (args) => runTool(() => listInvoiceMessages(client, args))
+    async (args, extra) => runTool(() => listInvoiceMessages(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_invoice_message",
@@ -22068,7 +22287,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send are blocked unless DANGEROUS_SEND=1 (Mike GO). Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema
     },
-    async (args) => runTool(() => createInvoiceMessage(client, args))
+    async (args, extra) => runTool(() => createInvoiceMessage(toolClient(client, extra), args))
   );
   server.registerTool(
     "preview_invoice_message",
@@ -22077,7 +22296,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoices/{INVOICE_ID}/messages/new. Returns Harvest-configured subject/body for a general, thank-you, or reminder message. Does not create or send a message.",
       inputSchema: previewInvoiceMessageInputSchema
     },
-    async (args) => runTool(() => previewInvoiceMessage(client, args))
+    async (args, extra) => runTool(() => previewInvoiceMessage(toolClient(client, extra), args))
   );
   server.registerTool(
     "delete_invoice_message",
@@ -22086,7 +22305,7 @@ function registerHarvestRestTools(server, client) {
       description: "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}.",
       inputSchema: deleteInvoiceMessageInputSchema
     },
-    async (args) => runTool(() => deleteInvoiceMessage(client, args.invoice_id, args.message_id))
+    async (args, extra) => runTool(() => deleteInvoiceMessage(toolClient(client, extra), args.invoice_id, args.message_id))
   );
   server.registerTool(
     "list_invoice_payments",
@@ -22095,7 +22314,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoices/{INVOICE_ID}/payments. Official remote MCP does not expose payment records.",
       inputSchema: listInvoicePaymentsInputSchema
     },
-    async (args) => runTool(() => listInvoicePayments(client, args))
+    async (args, extra) => runTool(() => listInvoicePayments(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_invoice_payment",
@@ -22104,7 +22323,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
       inputSchema: createInvoicePaymentInputSchema
     },
-    async (args) => runTool(() => createInvoicePayment(client, args))
+    async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), args))
   );
   server.registerTool(
     "delete_invoice_payment",
@@ -22113,7 +22332,7 @@ function registerHarvestRestTools(server, client) {
       description: "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}.",
       inputSchema: deleteInvoicePaymentInputSchema
     },
-    async (args) => runTool(() => deleteInvoicePayment(client, args.invoice_id, args.payment_id))
+    async (args, extra) => runTool(() => deleteInvoicePayment(toolClient(client, extra), args.invoice_id, args.payment_id))
   );
   server.registerTool(
     "list_contacts",
@@ -22122,7 +22341,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/contacts. Minimal helper to resolve invoice email recipients (name, email, invoice_recipient_status). Filter with client_id. Not full contacts CRUD.",
       inputSchema: listContactsInputSchema
     },
-    async (args) => runTool(() => listContacts(client, args))
+    async (args, extra) => runTool(() => listContacts(toolClient(client, extra), args))
   );
   server.registerTool(
     "list_user_billable_rates",
@@ -22131,7 +22350,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/users/{USER_ID}/billable_rates. Lists a user's default billable rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit billable rates.",
       inputSchema: listUserBillableRatesInputSchema
     },
-    async (args) => runTool(() => listUserBillableRates(client, args))
+    async (args, extra) => runTool(() => listUserBillableRates(toolClient(client, extra), args))
   );
   server.registerTool(
     "get_user_billable_rate",
@@ -22140,7 +22359,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
       inputSchema: getUserBillableRateInputSchema
     },
-    async (args) => runTool(() => getUserBillableRate(client, args))
+    async (args, extra) => runTool(() => getUserBillableRate(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_user_billable_rate",
@@ -22149,7 +22368,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/users/{USER_ID}/billable_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
       inputSchema: createUserBillableRateInputSchema
     },
-    async (args) => runTool(() => createUserBillableRate(client, args))
+    async (args, extra) => runTool(() => createUserBillableRate(toolClient(client, extra), args))
   );
   server.registerTool(
     "update_project_user_assignment",
@@ -22158,7 +22377,7 @@ function registerHarvestRestTools(server, client) {
       description: "PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}. Set use_default_rates (REST) or uses_default_rate (official MCP alias) and hourly_rate. Official assign_user_to_project accepts only project_id + user_id.",
       inputSchema: updateProjectUserAssignmentInputSchema
     },
-    async (args) => runTool(() => updateProjectUserAssignment(client, args))
+    async (args, extra) => runTool(() => updateProjectUserAssignment(toolClient(client, extra), args))
   );
 }
 
@@ -22186,7 +22405,7 @@ function createLazyClient() {
 async function main() {
   const server = new McpServer({
     name: "harvest-rest",
-    version: "0.2.0"
+    version: PACKAGE_VERSION
   });
   registerHarvestRestTools(server, createLazyClient());
   const transport = new StdioServerTransport();

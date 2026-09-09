@@ -14,7 +14,7 @@ This plugin ships **two** MCP servers:
 | Server | Transport | Auth |
 | --- | --- | --- |
 | `harvest` | Official remote `https://api.harvestapp.com/mcp` (`streamable-http`) | Host OAuth |
-| `harvest-rest` | Local stdio (`servers/harvest-rest`) | `HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` (+ optional `HARVEST_USER_AGENT`) |
+| `harvest-rest` | Local stdio (`servers/harvest-rest`) | `HARVEST_ACCESS_TOKEN` + `HARVEST_ACCOUNT_ID` (+ optional `HARVEST_USER_AGENT`; default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`) |
 
 Never ask the user to paste a personal access token, Account ID, or other secrets into chat or into this repo. If `harvest-rest` tools fail with a config error, tell the user to set those variables in the **host environment**, not in chat.
 
@@ -168,11 +168,14 @@ These four rate tools live on the **same** `servers/harvest-rest` stdio server a
 
 ## Known gaps
 
-Still not on official remote MCP or this P0 REST server:
+Still not on official remote MCP or this REST server (see `docs/API_V2_GAP_MATRIX.md`):
 
 - Invoice **PDF** binary download (public client URL may still be derived from `client_key` on a retrieved invoice).
-- Estimates, retainers (beyond invoice `estimate_id` / `retainer_id` fields), recurring invoice admin.
+- Invoice item categories; user cost rates (P1).
+- Estimates, retainers (beyond invoice `estimate_id` / `retainer_id` fields), recurring invoice admin, PTO, roles.
 - If a needed capability is missing, use official `submit_feedback` rather than inventing a workaround that mutates data incorrectly.
+
+Harvest API v2 requires `User-Agent` = integration name + author contact ([Overview](https://help.getharvest.com/api-v2/introduction/overview/general/)). General rate limit **100 / 15s**; Reports **100 / 15min**. On `429`, honor `Retry-After`.
 
 ## Do not
 

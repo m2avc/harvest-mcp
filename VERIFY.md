@@ -7,14 +7,14 @@
 | Skills frontmatter | PASS (`use-harvest-mcp`, `harvest-timers-and-time`, `harvest-projects-clients-tasks`, `harvest-expenses`, `harvest-invoices`, `harvest-rates-and-assignments`) |
 | Official 35-tool map | PASS (all 35 tools named in `skills/use-harvest-mcp/SKILL.md`) |
 | harvest-rest P0 tools | PASS (invoice tools + `list_user_billable_rates`, `get_user_billable_rate`, `create_user_billable_rate`, `update_project_user_assignment`) — **one** stdio server |
-| Unit tests | PASS → `cd servers/harvest-rest && npm test` (invoice + rates paths; no live creds) |
+| Unit tests | PASS → `cd servers/harvest-rest && npm test` (invoice + rates paths; no live creds). CI: `.github/workflows/ci.yml` on every PR. |
 | Typecheck + bundle | PASS → `npm run typecheck && npm run build` |
-| Public-safe scan | PASS (README + skills: no private client names / tokens / Account IDs) |
+| Public-safe scan | PASS (mcp.json, .env.example, COS-RUNBOOK, skills: no tokens / Account IDs / live person names / exact rates) |
 | Local install path | PASS → `~/.cursor/plugins/local/harvest-mcp` (real directory copy, not symlink to workspace) when proven on Cursor IDE |
 | `@anysphere/cursor-plugins` loader | SKIP on Grok Bot box (package/IDE loader not available the same way as Cursor IDE) |
 | Customize / Reload Window | SKIP — Grok Bot does not load `~/.cursor/plugins/local`; Marketplace/dashboard plugins only |
 | Live MCP OAuth smoke | SKIP here — host may already have a user Harvest connection separately |
-| Live harvest-rest CoS smoke | SKIP in CI — this PR: Chad $145 + Arabella assignment rates (see COS-RUNBOOK). No invoice email. |
+| Live harvest-rest CoS smoke | SKIP in CI — CoS via harvest-rest MCP before merge/publish (see COS-RUNBOOK). Throwaway draft on M2 internal client. No invoice email. Mike GO before Marketplace publish. |
 
 ## harvest-rest unit coverage (no secrets)
 
@@ -37,14 +37,13 @@ Asserted without calling Harvest:
 - `POST /v2/invoices/{id}/payments` **notes character-for-character** (whitespace, quotes, unicode); `send_thank_you` forced false
 - `GET/POST /v2/users/{id}/billable_rates` and GET-by-id
 - `PATCH /v2/projects/{id}/user_assignments/{id}` maps `uses_default_rate` → `use_default_rates`
+- Default User-Agent `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`; `HARVEST_USER_AGENT` override; 429 `Retry-After` retry; 4xx/5xx mapping (no token leak)
 
 ## Live CoS smoke (optional; do not commit tokens)
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**This PR (#2):** list rates / verify **Chad $145**, then **Arabella** assignment rates. Read-only. No invoice emails.
-
-**Sister PR #1 (same server):** throwaway **draft** only. No `create_invoice_message` send. No real client email.
+**This PR (#4):** P0 API v2 compliance + Marketplace security gate (CI, PR template, COS-RUNBOOK). CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset. No client email. **Mike human GO** before Marketplace publish or a public version tag.
 
 Invoice e2e (not this PR’s bar):
 
