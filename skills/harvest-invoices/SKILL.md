@@ -28,14 +28,14 @@ Related: `list_clients`, `list_projects`, `list_time_entries`, `get_time_report`
 `create_invoice_message` `POST /v2/invoices/{INVOICE_ID}/messages`:
 
 - **Omit `event_type`** to email the invoice. Include `recipients` (`email` required, `name` optional) and/or `send_me_a_copy=true`. Optional: `subject`, `body`, `attach_pdf`, `thank_you`.
-- **`event_type=send`** marks a draft as sent. It does **not** send email.
-- **`event_type=close`** writes off an open invoice.
-- **`event_type=draft`** marks an open invoice as draft.
-- **`event_type=re-open`** reopens a closed invoice.
+- **`event_type=send`** marks a **draft** as sent. It does **not** send email. Only call when `state` is `draft`.
+- **`event_type=close`** writes off an **open** invoice. Only call when `state` is `open`.
+- **`event_type=draft`** marks an **open** invoice as draft. Only call when `state` is `open`.
+- **`event_type=re-open`** reopens a **closed** invoice. Only call when `state` is `closed`.
 
 `preview_invoice_message` returns Harvest’s configured subject/body (`thank_you` / `reminder` query flags) and does not create a message.
 
-**Send gate:** omitting `event_type` (email) and `event_type=send` are blocked unless the host has `DANGEROUS_SEND=1` **and** Mike has GO’d a live send. Smoke / CoS tests use a throwaway draft + payment notes only — do not call the send path against live client invoices.
+**Send gate:** omitting `event_type` (email), `event_type=send`, and payment `send_thank_you=true` are blocked unless the host has `DANGEROUS_SEND=1` **and** Mike has GO’d a live send. Smoke / CoS tests use a throwaway draft + payment notes only — do not call the send path against live client invoices.
 
 Never claim sent / emailed / closed / reopened unless the tool succeeded.
 
@@ -61,14 +61,15 @@ Omitted fields are left unchanged.
 
 1. Resolve the client (and projects/time range for time-based drafts) before creating.
 2. Confirm amounts, dates, and recipients when ambiguous.
-3. After any mutation, report ids/state/amounts/event_type/`notes` returned by the tool — nothing more.
-4. Use `list_contacts` when the user says “send to the client’s billing contact” and you do not already have an email.
+3. Invoice mutations (`update_invoice`, `create_invoice_payment`, deletes, non-send messages) need **explicit user confirmation** before the tool call. Email / `event_type=send` / `send_thank_you` keep the stronger `DANGEROUS_SEND` + Mike GO gate.
+4. After any mutation, report ids/state/amounts/event_type/`notes` returned by the tool — nothing more.
+5. Use `list_contacts` when the user says “send to the client’s billing contact” and you do not already have an email.
 
 ## Do not
 
 - Claim an invoice was sent without a successful `create_invoice_message`
-- Email or `event_type=send` on a live client invoice without Mike GO and `DANGEROUS_SEND=1`
+- Email, `event_type=send`, or `send_thank_you=true` on a live client invoice without Mike GO and `DANGEROUS_SEND=1`
 - Rewrite payment notes
-- Delete invoices, messages, or payments without clear user intent
+- Update, pay, or delete invoices/messages/payments without explicit user confirmation (`confirm=true` on deletes)
 - Fabricate line items or totals when tools fail
 - Imply company-specific invoicing policy beyond what the user asked in-session

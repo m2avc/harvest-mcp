@@ -368,6 +368,42 @@ describe("HarvestClient", () => {
       assert.equal(requests[0]?.headers.authorization, "Bearer test-token");
     }
   });
+
+  it("applies fetchWithTimeout to each 429 retry attempt", async () => {
+    const signals: Array<AbortSignal | undefined> = [];
+    let attempt = 0;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      signals.push(init?.signal ?? undefined);
+      attempt += 1;
+      if (attempt === 1) {
+        return new Response(JSON.stringify({ message: "Slow down" }), {
+          status: 429,
+          headers: { "Content-Type": "application/json", "Retry-After": "0" },
+        });
+      }
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          const error = new Error("The operation was aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      });
+    };
+
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 20,
+      max429Retries: 1,
+      sleepImpl: async () => undefined,
+    });
+
+    await assert.rejects(() => client.request({ method: "GET", path: "/users/me" }), /timed out after 20ms/);
+    assert.equal(signals.length, 2);
+    assert.equal(signals[1]?.aborted, true);
+  });
 });
 
 describe("Retry-After parsing", () => {

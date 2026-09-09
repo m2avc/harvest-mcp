@@ -42,6 +42,7 @@ export const deleteInvoiceMessageInputSchema = z
   .object({
     invoice_id: z.coerce.number().int().positive(),
     message_id: z.coerce.number().int().positive(),
+    confirm: z.literal(true),
   })
   .strict();
 

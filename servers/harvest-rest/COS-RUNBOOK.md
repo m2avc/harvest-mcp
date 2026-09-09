@@ -6,6 +6,14 @@ Keep PRs **draft** until Harvest CoS smoke passes. Never email a real client inv
 
 This plugin is world-shared. Tokens never go in committed `mcp.json`. `DANGEROUS_SEND` stays unset unless Mike has GO'd a live send.
 
+Do **not** set `DANGEROUS_SEND` for smoke. If the variable is inherited from a parent shell or a previous Cursor MCP env, **clear it** before starting:
+
+```bash
+unset DANGEROUS_SEND
+```
+
+Cursor users: remove `DANGEROUS_SEND` from Settings → MCP → `harvest-rest` env (or user-local `~/.cursor/mcp.json`), then **reload MCP**. Do not enable it for smoke.
+
 ## Official API v2 client rules
 
 Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/) and [Authentication](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/):
@@ -51,7 +59,8 @@ npm run build
 export HARVEST_ACCESS_TOKEN="…"
 export HARVEST_ACCOUNT_ID="…"
 export HARVEST_USER_AGENT="harvest-cos-smoke (you@example.com)"
-# Do not export DANGEROUS_SEND for smoke.
+unset DANGEROUS_SEND
+# Do not export DANGEROUS_SEND for smoke. Do not enable it.
 node dist/index.js
 ```
 
@@ -79,9 +88,9 @@ cd servers/harvest-rest && npm test
    - Cursor Settings → MCP → `harvest-rest` → environment: `HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `HARVEST_USER_AGENT`
    - or a **user-local** `~/.cursor/mcp.json` (never commit) with the same `env` keys and `command`/`args` pointing at this repo’s `servers/harvest-rest/dist/index.js`
    - or launch Cursor from a shell that already exported those variables (host may inherit them)
-5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include invoice + rate tools. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
+5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include invoice + rate tools. If `harvest-rest` is missing, Node 22+ is required and the env/path is wrong.
 
-Leave `DANGEROUS_SEND` unset.
+Leave `DANGEROUS_SEND` unset. If it was previously set in Cursor MCP env, remove it and reload MCP before smoke.
 
 ## Live CoS smoke — required before merge of release-affecting tools / before publish
 
@@ -119,7 +128,7 @@ Replace `0` with the throwaway draft id. Pass: response `notes` equals that stri
 }
 ```
 
-Pass: payment `notes` match character-for-character (`list_invoice_payments` must show the same). Then `delete_invoice_payment`. Delete the throwaway draft if you created it for the smoke.
+Pass: payment `notes` match character-for-character (`list_invoice_payments` must show the same). Then `delete_invoice_payment` with `confirm=true`. Delete the throwaway draft if you created it for the smoke (`delete_invoice` also requires `confirm=true`).
 
 ### 3. Rates — read-only when rates tools change
 
