@@ -1,9 +1,10 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { describe, it } from "node:test";
 
 import { readHarvestEnv } from "../src/env.js";
 import { HarvestClient } from "../src/harvest-client.js";
-import { createInvoicePayment, deleteInvoicePayment } from "../src/tools/invoice-payments.js";
+import { createInvoicePayment, deleteInvoicePayment, listInvoicePayments } from "../src/tools/invoice-payments.js";
 import { deleteInvoice, updateInvoice } from "../src/tools/invoices.js";
 
 /**
@@ -40,11 +41,37 @@ export function parseE2eInvoiceId(raw: string | undefined): number {
   return id;
 }
 
+function paymentNotesWithMarker(marker: string): string {
+  return `${VERBATIM_NOTES}\n${marker}`;
+}
+
+function findPaymentIdByMarker(listed: unknown, marker: string): number | undefined {
+  if (!listed || typeof listed !== "object") {
+    return undefined;
+  }
+  const payments = (listed as { invoice_payments?: unknown }).invoice_payments;
+  if (!Array.isArray(payments)) {
+    return undefined;
+  }
+  for (const item of payments) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+    const payment = item as { id?: unknown; notes?: unknown };
+    if (typeof payment.notes === "string" && payment.notes.includes(marker) && typeof payment.id === "number") {
+      return payment.id;
+    }
+  }
+  return undefined;
+}
+
 describe("live Harvest CoS smoke (throwaway draft only)", { skip: !live }, () => {
   it("updates a throwaway draft and round-trips payment notes", async () => {
     const env = readHarvestEnv();
     const client = new HarvestClient(env);
     const invoiceId = parseE2eInvoiceId(process.env.HARVEST_E2E_INVOICE_ID);
+    const marker = `e2e-marker-${Date.now()}-${randomUUID()}`;
+    const notes = paymentNotesWithMarker(marker);
 
     const existing = (await client.request({
       method: "GET",
@@ -69,12 +96,19 @@ describe("live Harvest CoS smoke (throwaway draft only)", { skip: !live }, () =>
         invoice_id: invoiceId,
         amount: 0.01,
         paid_date: new Date().toISOString().slice(0, 10),
-        notes: VERBATIM_NOTES,
+        notes,
         send_thank_you: false,
-      })) as { id: number; notes: string };
+      })) as { id?: number; notes?: string };
 
-      paymentId = payment.id;
-      assert.equal(payment.notes, VERBATIM_NOTES);
+      assert.equal(payment.notes, notes);
+      assert.match(payment.notes ?? "", new RegExp(marker.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+
+      paymentId = typeof payment.id === "number" ? payment.id : undefined;
+      if (paymentId === undefined) {
+        const listed = await listInvoicePayments(client, { invoice_id: invoiceId });
+        paymentId = findPaymentIdByMarker(listed, marker);
+      }
+      assert.ok(paymentId !== undefined, "payment id missing after create and list-by-marker");
     } finally {
       if (paymentId !== undefined) {
         await deleteInvoicePayment(client, invoiceId, paymentId);
@@ -84,5 +118,20 @@ describe("live Harvest CoS smoke (throwaway draft only)", { skip: !live }, () =>
     if (process.env.HARVEST_E2E_DELETE_INVOICE === "1") {
       await deleteInvoice(client, invoiceId);
     }
+  });
+});
+
+describe("e2e payment marker helpers", () => {
+  it("locates only the payment whose notes include the unique marker", () => {
+    const marker = "e2e-marker-unique-1";
+    const listed = {
+      invoice_payments: [
+        { id: 11, notes: "other" },
+        { id: 22, notes: paymentNotesWithMarker(marker) },
+        { id: 33, notes: "e2e-marker-unique-2" },
+      ],
+    };
+    assert.equal(findPaymentIdByMarker(listed, marker), 22);
+    assert.equal(findPaymentIdByMarker({ invoice_payments: [] }, marker), undefined);
   });
 });
