@@ -164,17 +164,22 @@ Skill: `harvest-invoices`
 | `list_user_billable_rates` | GET user default billable rates |
 | `get_user_billable_rate` | GET one billable rate (API v2 supports retrieve) |
 | `create_user_billable_rate` | POST a user billable rate |
+| `list_user_cost_rates` | GET user cost rates |
+| `get_user_cost_rate` | GET one cost rate |
+| `create_user_cost_rate` | POST a user cost rate (Administrator only; confirm_replacement when omitting/backdating start_date) |
+| `list_invoice_item_categories` | GET invoice line-item `kind` categories |
+| `get_invoice_item_category` | GET one invoice item category |
+| `create_invoice_item_category` | POST an invoice item category |
 | `update_project_user_assignment` | PATCH assignment `use_default_rates` / `uses_default_rate` + `hourly_rate` |
 
-These four rate tools live on the **same** `servers/harvest-rest` stdio server as the invoice tools. Do not add a second stdio server.
+These rate, category, and invoice tools live on the **same** `servers/harvest-rest` stdio server. Do not add a second stdio server.
 
 ## Known gaps
 
 Still not on official remote MCP or this REST server (see `docs/API_V2_GAP_MATRIX.md`):
 
 - Invoice **PDF** binary download (public client URL may still be derived from `client_key` on a retrieved invoice).
-- Invoice item categories; user cost rates (P1).
-- Estimates, retainers (beyond invoice `estimate_id` / `retainer_id` fields), recurring invoice admin, PTO, roles.
+- Invoice item category **update/delete**; estimates, retainers, recurring invoice admin, PTO, roles.
 - If a needed capability is missing, use official `submit_feedback` rather than inventing a workaround that mutates data incorrectly.
 
 Harvest API v2 requires `User-Agent` = integration name + author contact ([Overview](https://help.getharvest.com/api-v2/introduction/overview/general/)). General rate limit **100 / 15s**; Reports **100 / 15min**. On `429`, honor `Retry-After`.

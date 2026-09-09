@@ -2,7 +2,7 @@
   "name": "@m2avc/harvest-rest-mcp",
   "version": "0.2.0",
   "private": true,
-  "description": "Custom stdio MCP server for Harvest API v2 invoice update/delete, messages, payments, user billable rates, and project assignment rates. Single REST entrypoint.",
+  "description": "Custom stdio MCP server for Harvest API v2 invoice update/delete, messages, payments, user billable/cost rates, invoice item categories, and project assignment rates. Single REST entrypoint.",
   "type": "module",
   "main": "dist/index.js",
   "engines": {
