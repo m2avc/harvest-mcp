@@ -110,7 +110,7 @@ These fail for different reasons. Do not treat a tool error as “the server is 
 
 ## Pre-publish live smoke matrix
 
-**Source of truth for Marketplace republish of ~0.2.0.** Harvest CoS must prove every harvest-rest tool that is safe without **Mike GO**. Run tools **through harvest-rest MCP in Cursor**, not only raw REST/curl or `npm test`.
+**Source of truth for Marketplace republish of 0.3.0.** Harvest CoS must prove every harvest-rest tool that is safe without **Mike GO**. Run tools **through harvest-rest MCP in Cursor**, not only raw REST/curl or `npm test`.
 
 `REST_TOOL_NAMES` is 22 tools. Each row is one of:
 

@@ -7,6 +7,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { HarvestClient } from "../src/harvest-client.js";
 import { registerHarvestRestTools, REST_TOOL_NAMES } from "../src/register-tools.js";
+import { PACKAGE_VERSION } from "../src/version.js";
 import { VERBATIM_PAYMENT_NOTES } from "./helpers.js";
 
 async function connectHarvestRest(fetchImpl: typeof fetch): Promise<{
@@ -20,7 +21,7 @@ async function connectHarvestRest(fetchImpl: typeof fetch): Promise<{
     fetchImpl,
   });
 
-  const server = new McpServer({ name: "harvest-rest", version: "0.2.0" });
+  const server = new McpServer({ name: "harvest-rest", version: PACKAGE_VERSION });
   registerHarvestRestTools(server, harvestClient);
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
