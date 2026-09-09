@@ -14,6 +14,7 @@ import {
 } from "./tools/invoice-messages.js";
 import {
   createInvoicePayment,
+  createInvoicePaymentFieldsSchema,
   createInvoicePaymentInputSchema,
   deleteInvoicePayment,
   deleteInvoicePaymentInputSchema,
@@ -85,7 +86,8 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     "delete_invoice",
     {
       title: "Delete invoice",
-      description: "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires clear user intent.",
+      description:
+        "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires confirm=true after explicit user confirmation.",
       inputSchema: deleteInvoiceInputSchema,
     },
     async (args, extra) => runTool(() => deleteInvoice(toolClient(client, extra), args.invoice_id)),
@@ -127,7 +129,8 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     "delete_invoice_message",
     {
       title: "Delete invoice message",
-      description: "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}.",
+      description:
+        "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}. Requires confirm=true after explicit user confirmation.",
       inputSchema: deleteInvoiceMessageInputSchema,
     },
     async (args, extra) => runTool(() => deleteInvoiceMessage(toolClient(client, extra), args.invoice_id, args.message_id)),
@@ -148,17 +151,19 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "Create invoice payment",
       description:
-        "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
-      inputSchema: createInvoicePaymentInputSchema,
+        "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
+      inputSchema: createInvoicePaymentFieldsSchema,
     },
-    async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), args)),
+    async (args, extra) =>
+      runTool(() => createInvoicePayment(toolClient(client, extra), createInvoicePaymentInputSchema.parse(args))),
   );
 
   server.registerTool(
     "delete_invoice_payment",
     {
       title: "Delete invoice payment",
-      description: "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}.",
+      description:
+        "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}. Requires confirm=true after explicit user confirmation.",
       inputSchema: deleteInvoicePaymentInputSchema,
     },
     async (args, extra) => runTool(() => deleteInvoicePayment(toolClient(client, extra), args.invoice_id, args.payment_id)),

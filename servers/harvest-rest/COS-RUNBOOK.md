@@ -6,6 +6,14 @@ Keep PRs **draft** until Harvest CoS smoke passes. Never email a real client inv
 
 This plugin is world-shared. Tokens never go in committed `mcp.json`. `DANGEROUS_SEND` stays unset unless Mike has GO'd a live send.
 
+Do **not** set `DANGEROUS_SEND` for smoke. If the variable is inherited from a parent shell or a previous Cursor MCP env, **clear it** before starting:
+
+```bash
+unset DANGEROUS_SEND
+```
+
+Cursor users: remove `DANGEROUS_SEND` from Settings → MCP → `harvest-rest` env (or user-local `~/.cursor/mcp.json`), then **reload MCP**. Do not enable it for smoke.
+
 ## Official API v2 client rules
 
 Cited from [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/) and [Authentication](https://help.getharvest.com/api-v2/authentication-api/authentication/authentication/):
@@ -51,7 +59,8 @@ npm run build
 export HARVEST_ACCESS_TOKEN="…"
 export HARVEST_ACCOUNT_ID="…"
 export HARVEST_USER_AGENT="harvest-cos-smoke (you@example.com)"
-# Do not export DANGEROUS_SEND for smoke.
+unset DANGEROUS_SEND
+# Do not export DANGEROUS_SEND for smoke. Do not enable it.
 node dist/index.js
 ```
 
@@ -79,9 +88,25 @@ cd servers/harvest-rest && npm test
    - Cursor Settings → MCP → `harvest-rest` → environment: `HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `HARVEST_USER_AGENT`
    - or a **user-local** `~/.cursor/mcp.json` (never commit) with the same `env` keys and `command`/`args` pointing at this repo’s `servers/harvest-rest/dist/index.js`
    - or launch Cursor from a shell that already exported those variables (host may inherit them)
-5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include invoice + rate tools. If `harvest-rest` is missing, Node 18+ is required and the env/path is wrong.
+5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include invoice + rate tools.
 
-Leave `DANGEROUS_SEND` unset.
+Leave `DANGEROUS_SEND` unset. If it was previously set in Cursor MCP env, remove it and reload MCP before smoke.
+
+## Troubleshooting: missing server vs tool failures
+
+These fail for different reasons. Do not treat a tool error as “the server is missing.”
+
+**`harvest-rest` does not appear at all** (no tools listed, Cursor shows the server failed to start):
+
+- **Node 22+** — `engines` / CI use Node 22. Node 18 may start some paths; Marketplace CoS should match CI.
+- **`dist` missing** — run `cd servers/harvest-rest && npm ci && npm run build`. Plugin args point at `${PLUGIN_ROOT}/servers/harvest-rest/dist/index.js`.
+- **`PLUGIN_ROOT` / path** — use a real directory copy (Marketplace or `~/.cursor/plugins/local/harvest-mcp`), not a symlink. Confirm `dist/index.js` exists at that resolved path.
+
+**Server starts, tools fail when called** (config / Harvest errors):
+
+- Tokens are **lazy**. `HARVEST_ACCESS_TOKEN` and `HARVEST_ACCOUNT_ID` are read on the first tool request, not at stdio launch. A missing token does **not** hide the server.
+- Set credentials in host MCP env (or a user-local `~/.cursor/mcp.json`). Reload MCP after changing env.
+- `DANGEROUS_SEND` unset is expected for smoke; send-path tools will error until Mike GO.
 
 ## Live CoS smoke — required before merge of release-affecting tools / before publish
 
@@ -119,7 +144,7 @@ Replace `0` with the throwaway draft id. Pass: response `notes` equals that stri
 }
 ```
 
-Pass: payment `notes` match character-for-character (`list_invoice_payments` must show the same). Then `delete_invoice_payment`. Delete the throwaway draft if you created it for the smoke.
+Pass: payment `notes` match character-for-character (`list_invoice_payments` must show the same). Then `delete_invoice_payment` with `confirm=true`. Delete the throwaway draft if you created it for the smoke (`delete_invoice` also requires `confirm=true`).
 
 ### 3. Rates — read-only when rates tools change
 
@@ -129,6 +154,17 @@ When the PR touches billable rates, cost rates, or assignment rates:
 2. Official `list_users` → operator-supplied user id → official `list_project_assignments`. Report `uses_default_rate` / `hourly_rate` as returned.
 
 Do not invent ids. Do not commit person names or exact live rates.
+
+Do **not** call `update_project_user_assignment`, `create_user_billable_rate`, or other rate writes during smoke.
+
+### 4. Rate writes — separate confirm-required procedure (not smoke)
+
+Only when an operator has explicitly asked to change a rate:
+
+1. Resolve the user / assignment ids from official list tools. Do not invent ids.
+2. Preview the current rate (`list_user_billable_rates` or official `list_project_assignments`).
+3. Get explicit confirmation of the new amount and `start_date` (or assignment `hourly_rate` / `use_default_rates`).
+4. Then call the write tool. Omit this entire section from default CoS smoke.
 
 ### Do not call in smoke
 

@@ -21853,7 +21853,8 @@ var listInvoiceMessagesInputSchema = external_exports.object({
 }).strict();
 var deleteInvoiceMessageInputSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
-  message_id: external_exports.coerce.number().int().positive()
+  message_id: external_exports.coerce.number().int().positive(),
+  confirm: external_exports.literal(true)
 }).strict();
 var previewInvoiceMessageInputSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
@@ -21960,14 +21961,15 @@ async function deleteInvoiceMessage(client, invoiceId, messageId) {
 }
 
 // src/tools/invoice-payments.ts
-var createInvoicePaymentInputSchema = external_exports.object({
+var createInvoicePaymentFieldsSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
-  amount: external_exports.number(),
+  amount: external_exports.number().finite().positive(),
   paid_at: external_exports.string().optional(),
   paid_date: external_exports.string().optional(),
   notes: external_exports.string().optional(),
   send_thank_you: external_exports.boolean().optional()
-}).strict().superRefine((value, ctx) => {
+}).strict();
+var createInvoicePaymentInputSchema = createInvoicePaymentFieldsSchema.superRefine((value, ctx) => {
   if (value.paid_at !== void 0 && value.paid_date !== void 0) {
     ctx.addIssue({
       code: external_exports.ZodIssueCode.custom,
@@ -21983,7 +21985,8 @@ var listInvoicePaymentsInputSchema = external_exports.object({
 }).strict();
 var deleteInvoicePaymentInputSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
-  payment_id: external_exports.coerce.number().int().positive()
+  payment_id: external_exports.coerce.number().int().positive(),
+  confirm: external_exports.literal(true)
 }).strict();
 function buildCreateInvoicePaymentBody(input, env = process.env) {
   const body = {
@@ -22091,7 +22094,15 @@ var invoiceLineItemSchema = external_exports.object({
   taxed: external_exports.boolean().optional(),
   taxed2: external_exports.boolean().optional(),
   _destroy: external_exports.boolean().optional()
-}).strict();
+}).strict().superRefine((item, ctx) => {
+  if (item._destroy === true && item.id === void 0) {
+    ctx.addIssue({
+      code: external_exports.ZodIssueCode.custom,
+      message: "Line items with _destroy=true must include a valid id.",
+      path: ["id"]
+    });
+  }
+});
 var updateInvoiceInputSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
   client_id: external_exports.coerce.number().int().positive().optional(),
@@ -22112,7 +22123,8 @@ var updateInvoiceInputSchema = external_exports.object({
   line_items: external_exports.array(invoiceLineItemSchema).optional()
 }).strict();
 var deleteInvoiceInputSchema = external_exports.object({
-  invoice_id: external_exports.coerce.number().int().positive()
+  invoice_id: external_exports.coerce.number().int().positive(),
+  confirm: external_exports.literal(true)
 }).strict();
 var UPDATE_INVOICE_KEYS = [
   "client_id",
@@ -22266,7 +22278,7 @@ function registerHarvestRestTools(server, client) {
     "delete_invoice",
     {
       title: "Delete invoice",
-      description: "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires clear user intent.",
+      description: "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires confirm=true after explicit user confirmation.",
       inputSchema: deleteInvoiceInputSchema
     },
     async (args, extra) => runTool(() => deleteInvoice(toolClient(client, extra), args.invoice_id))
@@ -22302,7 +22314,7 @@ function registerHarvestRestTools(server, client) {
     "delete_invoice_message",
     {
       title: "Delete invoice message",
-      description: "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}.",
+      description: "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}. Requires confirm=true after explicit user confirmation.",
       inputSchema: deleteInvoiceMessageInputSchema
     },
     async (args, extra) => runTool(() => deleteInvoiceMessage(toolClient(client, extra), args.invoice_id, args.message_id))
@@ -22320,16 +22332,16 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_payment",
     {
       title: "Create invoice payment",
-      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
-      inputSchema: createInvoicePaymentInputSchema
+      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
+      inputSchema: createInvoicePaymentFieldsSchema
     },
-    async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), args))
+    async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), createInvoicePaymentInputSchema.parse(args)))
   );
   server.registerTool(
     "delete_invoice_payment",
     {
       title: "Delete invoice payment",
-      description: "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}.",
+      description: "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}. Requires confirm=true after explicit user confirmation.",
       inputSchema: deleteInvoicePaymentInputSchema
     },
     async (args, extra) => runTool(() => deleteInvoicePayment(toolClient(client, extra), args.invoice_id, args.payment_id))

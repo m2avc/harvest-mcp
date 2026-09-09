@@ -31,7 +31,8 @@ Organize work around what tools return (do not invent values):
 - `InvoiceMessage = { id, event_type, recipients, subject, body }`
 - `InvoicePayment = { id, amount, paid_at, paid_date, notes }`
 - `BillableRate = { id, amount, start_date, end_date }`
-- `UserAssignment = { id, use_default_rates, hourly_rate }`
+- `UserAssignment` (harvest-rest / API v2 PATCH): `{ id, use_default_rates, hourly_rate }`
+- Official MCP assignment read (`list_project_assignments`): `{ uses_default_rate, billable_rate }` — same meaning, different names. Do not send the official shape on `update_project_user_assignment`.
 
 Call tools and report what they return. Do not invent IDs, hours, or invoice totals.
 
@@ -47,21 +48,22 @@ Both servers act as the **signed-in Harvest user** (OAuth user or token owner). 
 
 Official remote MCP **creates and reads draft invoices** (`create_invoice`, `create_invoice_from_tracked_time`, `list_invoices`, `get_invoice`). It cannot update, delete, send, or record payments.
 
-**Sending and state changes** are on `harvest-rest` via `create_invoice_message`:
+**Sending and state changes** are on `harvest-rest` via `create_invoice_message`. Call close / draft / re-open **only** when the invoice is already in the success state for that event:
 
-| `event_type` | Effect |
-| --- | --- |
-| omitted | Email the invoice. Requires `recipients[]` and/or `send_me_a_copy=true`. |
-| `send` | Mark a **draft** as sent. Does **not** email. |
-| `close` | Write off an open invoice. |
-| `draft` | Mark an open invoice as draft. |
-| `re-open` | Re-open a closed invoice. |
+| `event_type` | Allowed current `state` | Effect |
+| --- | --- | --- |
+| omitted | draft or open (as Harvest allows) | Email the invoice. Requires `recipients[]` and/or `send_me_a_copy=true`. |
+| `send` | **draft** only | Mark a draft as sent. Does **not** email. |
+| `close` | **open** only | Write off an open invoice. |
+| `draft` | **open** only | Mark an open invoice as draft. |
+| `re-open` | **closed** only | Re-open a closed invoice. |
 
 Use `preview_invoice_message` (`GET .../messages/new`) to fetch Harvest’s configured subject/body without sending.
 
 - After `create_invoice` / `create_invoice_from_tracked_time`, the invoice is still a **draft** until a message tool succeeds.
-- Email send (omit `event_type`) and `event_type=send` require host `DANGEROUS_SEND=1` and Mike GO. Without that flag the tool errors; do not work around it. CoS smoke is throwaway draft + payment notes only — no send.
-- Never claim an invoice was sent, emailed, closed, or paid unless the corresponding `harvest-rest` tool succeeded.
+- Email send (omit `event_type`), `event_type=send`, and payment `send_thank_you=true` require host `DANGEROUS_SEND=1` and Mike GO. Without that flag the tool errors; do not work around it. CoS smoke is throwaway draft + payment notes only — no send.
+- Invoice mutations (`update_invoice`, deletes, payments, non-send messages) need **explicit user confirmation** first. Email / `event_type=send` / `send_thank_you` keep the stronger `DANGEROUS_SEND` + Mike GO gate.
+- Never claim an invoice was sent, emailed, closed, re-opened, or paid unless the corresponding `harvest-rest` tool succeeded.
 - Prefer the `harvest-invoices` skill for invoice workflows.
 
 ## Full official tool map (35)
@@ -150,14 +152,14 @@ Skill: `harvest-invoices`
 | Tool | Intent |
 | --- | --- |
 | `update_invoice` | PATCH invoice headers; line items create / update / `_destroy` |
-| `delete_invoice` | Delete an invoice (clear user intent) |
+| `delete_invoice` | Delete an invoice (`confirm=true` after explicit user confirmation) |
 | `list_invoice_messages` | List messages for an invoice |
 | `create_invoice_message` | Email, or `event_type` send / close / draft / re-open |
 | `preview_invoice_message` | Preview subject/body (`GET .../messages/new`) |
-| `delete_invoice_message` | Delete a message |
+| `delete_invoice_message` | Delete a message (`confirm=true`) |
 | `list_invoice_payments` | List payments |
-| `create_invoice_payment` | Record a payment; **preserve `notes` verbatim** |
-| `delete_invoice_payment` | Delete a payment |
+| `create_invoice_payment` | Record a payment; **preserve `notes` verbatim**; `send_thank_you` gated by `DANGEROUS_SEND` |
+| `delete_invoice_payment` | Delete a payment (`confirm=true`) |
 | `list_contacts` | Resolve recipient name/email (`client_id` filter) |
 | `list_user_billable_rates` | GET user default billable rates |
 | `get_user_billable_rate` | GET one billable rate (API v2 supports retrieve) |
