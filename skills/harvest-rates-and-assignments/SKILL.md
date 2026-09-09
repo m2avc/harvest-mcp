@@ -33,8 +33,8 @@ Official remote MCP OAuth does **not** authenticate harvest-rest. CoS connect st
 | `list_user_billable_rates` | `GET /v2/users/{user_id}/billable_rates` |
 | `get_user_billable_rate` | `GET /v2/users/{user_id}/billable_rates/{billable_rate_id}` (API v2 supports retrieve) |
 | `create_user_billable_rate` | `POST /v2/users/{user_id}/billable_rates` |
-| `list_user_cost_rates` | `GET /v2/users/{user_id}/cost_rates` |
-| `get_user_cost_rate` | `GET /v2/users/{user_id}/cost_rates/{cost_rate_id}` |
+| `list_user_cost_rates` | `GET /v2/users/{user_id}/cost_rates` (Administrator only) |
+| `get_user_cost_rate` | `GET /v2/users/{user_id}/cost_rates/{cost_rate_id}` (Administrator only) |
 | `create_user_cost_rate` | `POST /v2/users/{user_id}/cost_rates` (Administrator only; `confirm_replacement=true` when omitting or backdating `start_date`) |
 | `update_project_user_assignment` | `PATCH /v2/projects/{project_id}/user_assignments/{user_assignment_id}` |
 

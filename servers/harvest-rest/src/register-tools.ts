@@ -243,7 +243,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "List user cost rates",
       description:
-        "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator permission (not Manager) to edit cost rates.",
+        "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Administrator only (not Manager).",
       inputSchema: listUserCostRatesInputSchema,
     },
     async (args, extra) => runTool(() => listUserCostRates(toolClient(client, extra), args)),
@@ -254,7 +254,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "Get user cost rate",
       description:
-        "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
+        "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this. Administrator only (not Manager).",
       inputSchema: getUserCostRateInputSchema,
     },
     async (args, extra) => runTool(() => getUserCostRate(toolClient(client, extra), args)),
@@ -311,7 +311,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/estimates. Official remote MCP has no estimates tools. Filter with client_id, state (draft|sent|accepted|declined), from, to, updated_since. Read-only.",
       inputSchema: listEstimatesInputSchema,
     },
-    async (args) => runTool(() => listEstimates(client, args)),
+    async (args, extra) => runTool(() => listEstimates(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -322,7 +322,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/estimates/{ESTIMATE_ID}. Returns the estimate including line_items and client_key (public client URL). Does not send or accept the estimate.",
       inputSchema: getEstimateInputSchema,
     },
-    async (args) => runTool(() => getEstimate(client, args)),
+    async (args, extra) => runTool(() => getEstimate(toolClient(client, extra), args)),
   );
 
   server.registerTool(

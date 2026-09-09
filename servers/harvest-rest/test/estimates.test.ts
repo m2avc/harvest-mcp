@@ -28,4 +28,28 @@ describe("estimates", () => {
     const parsed = listEstimatesInputSchema.safeParse({ state: "open" });
     assert.equal(parsed.success, false);
   });
+
+  it("accepts real calendar from/to dates including future dates", () => {
+    assert.equal(
+      listEstimatesInputSchema.safeParse({ from: "2020-01-01", to: "2099-12-31" }).success,
+      true,
+    );
+  });
+
+  it("rejects invalid from/to calendar dates", () => {
+    assert.equal(listEstimatesInputSchema.safeParse({ from: "05/05/2020" }).success, false);
+    assert.equal(listEstimatesInputSchema.safeParse({ to: "2026-02-30" }).success, false);
+  });
+
+  it("accepts updated_since as an ISO datetime with offset", () => {
+    assert.equal(
+      listEstimatesInputSchema.safeParse({ updated_since: "2026-01-01T00:00:00Z" }).success,
+      true,
+    );
+  });
+
+  it("rejects updated_since that is not an ISO datetime", () => {
+    assert.equal(listEstimatesInputSchema.safeParse({ updated_since: "not-a-date" }).success, false);
+    assert.equal(listEstimatesInputSchema.safeParse({ updated_since: "2026-01-01" }).success, false);
+  });
 });

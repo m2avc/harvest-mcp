@@ -164,8 +164,8 @@ Skill: `harvest-invoices`
 | `list_user_billable_rates` | GET user default billable rates |
 | `get_user_billable_rate` | GET one billable rate (API v2 supports retrieve) |
 | `create_user_billable_rate` | POST a user billable rate |
-| `list_user_cost_rates` | GET user cost rates |
-| `get_user_cost_rate` | GET one cost rate |
+| `list_user_cost_rates` | GET user cost rates (Administrator only) |
+| `get_user_cost_rate` | GET one cost rate (Administrator only) |
 | `create_user_cost_rate` | POST a user cost rate (Administrator only; confirm_replacement when omitting/backdating start_date) |
 | `list_invoice_item_categories` | GET invoice line-item `kind` categories |
 | `get_invoice_item_category` | GET one invoice item category |
