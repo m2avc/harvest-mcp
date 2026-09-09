@@ -265,7 +265,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
     {
       title: "Create user cost rate",
       description:
-        "POST /v2/users/{USER_ID}/cost_rates. Administrator only (not Manager). amount is required; start_date is optional (real YYYY-MM-DD, not in the future). Omitting start_date or using a start_date earlier than an existing rate replaces rate history — requires confirm_replacement=true after explicit user confirmation.",
+        "POST /v2/users/{USER_ID}/cost_rates. Administrator only (not Manager). amount is required; start_date is optional (real YYYY-MM-DD, not in the future). Omitting start_date or using a start_date earlier than or equal to an existing rate replaces rate history — requires confirm_replacement=true after explicit user confirmation.",
       inputSchema: createUserCostRateInputSchema,
     },
     async (args, extra) => runTool(() => createUserCostRate(toolClient(client, extra), args)),

@@ -65,16 +65,39 @@ describe("user cost rates", () => {
     assert.deepEqual(requests[0]?.bodyJson, { amount: 40 });
   });
 
-  it("requires confirm_replacement when start_date is earlier than an existing rate", async () => {
+  it("requires confirm_replacement when start_date is earlier than or equal to an existing rate", async () => {
     const { client, requests } = createMockClient({
-      responses: [{ responseBody: LIST_FIXTURE }],
+      responses: [{ responseBody: LIST_FIXTURE }, { responseBody: LIST_FIXTURE }],
     });
     await assert.rejects(
       () => createUserCostRate(client, { user_id: 3226125, amount: 30, start_date: "2020-01-01" }),
       (error: unknown) => error instanceof HarvestConfigError && /confirm_replacement=true/.test(error.message),
     );
-    assert.equal(requests.length, 1);
+    await assert.rejects(
+      () => createUserCostRate(client, { user_id: 3226125, amount: 30, start_date: "2024-01-01" }),
+      (error: unknown) => error instanceof HarvestConfigError && /confirm_replacement=true/.test(error.message),
+    );
+    assert.equal(requests.length, 2);
     assert.equal(requests[0]?.method, "GET");
+    assert.equal(requests[1]?.method, "GET");
+  });
+
+  it("POSTs an equal start_date when replacement is acknowledged", async () => {
+    const { client, requests } = createMockClient({
+      responses: [
+        { responseBody: LIST_FIXTURE },
+        { status: 201, responseBody: { id: 995, amount: 30, start_date: "2024-01-01" } },
+      ],
+    });
+    await createUserCostRate(client, {
+      user_id: 3226125,
+      amount: 30,
+      start_date: "2024-01-01",
+      confirm_replacement: true,
+    });
+    assert.equal(requests[0]?.method, "GET");
+    assert.equal(requests[1]?.method, "POST");
+    assert.deepEqual(requests[1]?.bodyJson, { amount: 30, start_date: "2024-01-01" });
   });
 
   it("POSTs a backdated start_date when replacement is acknowledged", async () => {
@@ -97,6 +120,13 @@ describe("user cost rates", () => {
 
   it("omits start_date when not provided", () => {
     assert.deepEqual(buildCreateCostRateBody({ user_id: 1, amount: 40 }), { amount: 40 });
+  });
+
+  it("rejects a non-finite amount at the schema", () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      assert.equal(createUserCostRateInputSchema.safeParse({ user_id: 1, amount }).success, false);
+    }
+    assert.equal(createUserCostRateInputSchema.safeParse({ user_id: 1, amount: 40 }).success, true);
   });
 
   it("rejects a bad, impossible, or future start_date at the schema", () => {

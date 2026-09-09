@@ -58,6 +58,13 @@ describe("billable rates", () => {
     assert.deepEqual(buildCreateBillableRateBody({ user_id: 1, amount: 145 }), { amount: 145 });
   });
 
+  it("rejects a non-finite amount at the schema", () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      assert.equal(createUserBillableRateInputSchema.safeParse({ user_id: 1, amount }).success, false);
+    }
+    assert.equal(createUserBillableRateInputSchema.safeParse({ user_id: 1, amount: 145 }).success, true);
+  });
+
   it("rejects a bad, impossible, or future start_date at the schema", () => {
     assert.equal(
       createUserBillableRateInputSchema.safeParse({

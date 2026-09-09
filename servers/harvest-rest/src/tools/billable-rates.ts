@@ -21,7 +21,7 @@ export const getUserBillableRateInputSchema = z
 export const createUserBillableRateInputSchema = z
   .object({
     user_id: z.coerce.number().int().positive(),
-    amount: z.number(),
+    amount: z.number().finite(),
     start_date: isoDateSchema.optional(),
   })
   .strict();
