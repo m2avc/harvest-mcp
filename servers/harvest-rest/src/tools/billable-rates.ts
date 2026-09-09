@@ -1,8 +1,7 @@
 import { z } from "zod";
 
 import type { HarvestClient } from "../harvest-client.js";
-
-const isoDateSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "start_date must be YYYY-MM-DD");
+import { isoDateSchema } from "./iso-date.js";
 
 export const listUserBillableRatesInputSchema = z
   .object({
@@ -22,7 +21,7 @@ export const getUserBillableRateInputSchema = z
 export const createUserBillableRateInputSchema = z
   .object({
     user_id: z.coerce.number().int().positive(),
-    amount: z.number(),
+    amount: z.number().finite(),
     start_date: isoDateSchema.optional(),
   })
   .strict();

@@ -1,15 +1,21 @@
 import { z } from "zod";
 
 import type { HarvestClient } from "../harvest-client.js";
+import { isRealIsoDate } from "./iso-date.js";
 
 const estimateStateSchema = z.enum(["draft", "sent", "accepted", "declined"]);
+
+/** YYYY-MM-DD calendar date for estimate `from`/`to`. Allows future dates; do not reuse isoDateSchema. */
+const estimateCalendarDateSchema = z
+  .string()
+  .refine(isRealIsoDate, "must be a real YYYY-MM-DD calendar date");
 
 export const listEstimatesInputSchema = z
   .object({
     client_id: z.coerce.number().int().positive().optional(),
-    updated_since: z.string().optional(),
-    from: z.string().optional(),
-    to: z.string().optional(),
+    updated_since: z.string().datetime({ offset: true }).optional(),
+    from: estimateCalendarDateSchema.optional(),
+    to: estimateCalendarDateSchema.optional(),
     state: estimateStateSchema.optional(),
     page: z.coerce.number().int().positive().optional(),
     per_page: z.coerce.number().int().min(1).max(2000).optional(),

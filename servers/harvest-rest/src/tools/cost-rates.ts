@@ -22,7 +22,7 @@ export const getUserCostRateInputSchema = z
 export const createUserCostRateInputSchema = z
   .object({
     user_id: z.coerce.number().int().positive(),
-    amount: z.number(),
+    amount: z.number().finite(),
     start_date: isoDateSchema.optional(),
     confirm_replacement: z.literal(true).optional(),
   })
@@ -61,12 +61,12 @@ export function existingCostRateStartDates(listed: unknown): string[] {
   return starts;
 }
 
-/** Omitted start_date replaces all rates; a date earlier than an existing start backdates over it. */
+/** Omitted start_date replaces all rates; a date earlier than or equal to an existing start replaces it. */
 export function isCostRateReplacement(startDate: string | undefined, existingStartDates: string[]): boolean {
   if (startDate === undefined) {
     return true;
   }
-  return existingStartDates.some((existing) => startDate < existing);
+  return existingStartDates.some((existing) => startDate <= existing);
 }
 
 export function assertCostRateReplacementAcknowledged(
@@ -80,7 +80,7 @@ export function assertCostRateReplacementAcknowledged(
     return;
   }
   throw new HarvestConfigError(
-    "create_user_cost_rate would replace existing rate(s). Pass confirm_replacement=true after explicit user confirmation. Omitting start_date replaces all rates; a start_date earlier than an existing rate backdates over it.",
+    "create_user_cost_rate would replace existing rate(s). Pass confirm_replacement=true after explicit user confirmation. Omitting start_date replaces all rates; a start_date earlier than or equal to an existing rate replaces it.",
   );
 }
 

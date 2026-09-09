@@ -58,12 +58,45 @@ describe("billable rates", () => {
     assert.deepEqual(buildCreateBillableRateBody({ user_id: 1, amount: 145 }), { amount: 145 });
   });
 
-  it("rejects a bad start_date at the schema", () => {
-    const parsed = createUserBillableRateInputSchema.safeParse({
-      user_id: 1,
-      amount: 1,
-      start_date: "05/05/2020",
-    });
-    assert.equal(parsed.success, false);
+  it("rejects a non-finite amount at the schema", () => {
+    for (const amount of [Number.NaN, Number.POSITIVE_INFINITY, Number.NEGATIVE_INFINITY]) {
+      assert.equal(createUserBillableRateInputSchema.safeParse({ user_id: 1, amount }).success, false);
+    }
+    assert.equal(createUserBillableRateInputSchema.safeParse({ user_id: 1, amount: 145 }).success, true);
+  });
+
+  it("rejects a bad, impossible, or future start_date at the schema", () => {
+    assert.equal(
+      createUserBillableRateInputSchema.safeParse({
+        user_id: 1,
+        amount: 1,
+        start_date: "05/05/2020",
+      }).success,
+      false,
+    );
+    assert.equal(
+      createUserBillableRateInputSchema.safeParse({
+        user_id: 1,
+        amount: 1,
+        start_date: "2026-02-30",
+      }).success,
+      false,
+    );
+    assert.equal(
+      createUserBillableRateInputSchema.safeParse({
+        user_id: 1,
+        amount: 1,
+        start_date: "2099-01-01",
+      }).success,
+      false,
+    );
+    assert.equal(
+      createUserBillableRateInputSchema.safeParse({
+        user_id: 1,
+        amount: 1,
+        start_date: "2020-05-05",
+      }).success,
+      true,
+    );
   });
 });

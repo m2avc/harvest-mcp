@@ -41,14 +41,14 @@ Asserted without calling Harvest:
 - `fetchWithTimeout` (default 30s; `timeoutMs: 0` disables) wraps **each** 429 retry attempt
 - `delete_invoice` / `delete_invoice_message` / `delete_invoice_payment` require `confirm: true`
 - Payment `amount` finite and `> 0`; line items with `_destroy: true` require `id`; payment `inputSchema` is a plain ZodObject
-- P1: invoice item categories list/get/create; user cost rates list/get/create (mocked; no live send)
+- P1: invoice item categories list/get/create; user cost rates list/get/create (mocked; no live API calls or mutations). Live smoke verification excludes `create_user_cost_rate` and `create_invoice_item_category`.
 - P2: estimates list/get (read-only; no create/send)
 
 ## Live CoS smoke (optional; do not commit tokens)
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**Stacked on P1 → PR #9 → #4:** P0 compliance, CodeRabbit follow-ups, and P1 categories/cost rates remain on the base. This revision adds P2 read-only `list_estimates` / `get_estimate` on the same harvest-rest stdio server. CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag.
+**Based on main after PR #12 (including PR #4):** CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag.
 
 Invoice e2e (not this PR’s bar):
 
