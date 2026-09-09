@@ -171,12 +171,12 @@ Line items are **not** a separate resource: create/update/`_destroy` on `POST/PA
 
 ### Estimates
 
-Entire domain missing from official MCP and harvest-rest.
+Official MCP has no estimate tools. harvest-rest adds read-only list/get. Create/update/delete/messages stay deferred.
 
 | Method | Path | REST | MCP | Priority | Status |
 | --- | --- | --- | --- | --- | --- |
-| GET | `/v2/estimates` | — | — | P2 | todo |
-| GET | `/v2/estimates/{ESTIMATE_ID}` | — | — | P2 | todo |
+| GET | `/v2/estimates` | `list_estimates` | — | P2 | done (REST, read-only) |
+| GET | `/v2/estimates/{ESTIMATE_ID}` | `get_estimate` | — | P2 | done (REST, read-only) |
 | POST | `/v2/estimates` | — | — | P2 | todo |
 | PATCH | `/v2/estimates/{ESTIMATE_ID}` | — | — | P2 | todo |
 | DELETE | `/v2/estimates/{ESTIMATE_ID}` | — | — | P2 | todo |
@@ -358,7 +358,8 @@ Official MCP also has `submit_feedback` (not a v2 REST resource).
 ### P2 — later drafts
 
 - [ ] Invoice item category PATCH/DELETE
-- [ ] Estimates + estimate messages (gate email) + estimate item categories
+- [x] Estimates list/get (read-only)
+- [ ] Estimate create/update/delete + messages (gate email) + estimate item categories
 - [ ] PTO (assignments, allocations, calendars, balances, types, requests, schedules)
 - [ ] Roles, user teammates, `GET /v2/users/me`
 - [ ] Remaining MCP CRUD gaps: delete client/project/task/expense; get-by-id

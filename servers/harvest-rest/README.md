@@ -4,9 +4,9 @@ Custom **stdio MCP server** for Harvest API v2 resources that the official remot
 
 This is the **single** REST entrypoint for this plugin. Do not add a second stdio package.
 
-## Tools (P0 + P1)
+## Tools (P0 + P1 + P2 read)
 
-Invoice update/messages/payments plus user billable/cost rates, invoice item categories, and project assignment hourly rates. See the root README and [docs/API_V2_GAP_MATRIX.md](../../docs/API_V2_GAP_MATRIX.md).
+Invoice update/messages/payments plus user billable/cost rates, invoice item categories, read-only estimates, and project assignment hourly rates. See the root README and [docs/API_V2_GAP_MATRIX.md](../../docs/API_V2_GAP_MATRIX.md).
 
 ## Auth
 

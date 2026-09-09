@@ -5,7 +5,7 @@
 Agent Plugin that connects [Harvest](https://www.getharvest.com/) through:
 
 1. **Harvest’s official remote MCP** at `https://api.harvestapp.com/mcp` (`streamable-http`) — OAuth, 35 tools.
-2. **This plugin’s `harvest-rest` stdio server** (`servers/harvest-rest`) — Harvest API v2 invoice update/delete, messages, payments, user billable/cost rates, invoice item categories, and project assignment hourly rates. **One** stdio REST entrypoint.
+2. **This plugin’s `harvest-rest` stdio server** (`servers/harvest-rest`) — Harvest API v2 invoice update/delete, messages, payments, user billable/cost rates, invoice item categories, read-only estimates, and project assignment hourly rates. **One** stdio REST entrypoint.
 
 This is community packaging by M2 AV Consulting, LLC. It is **not** an official Harvest Inc listing.
 
@@ -104,6 +104,8 @@ Invoices: `list_invoices`, `get_invoice`, `create_invoice`, `create_invoice_from
 | `list_invoice_item_categories` | `GET /v2/invoice_item_categories` |
 | `get_invoice_item_category` | `GET /v2/invoice_item_categories/{ID}` |
 | `create_invoice_item_category` | `POST /v2/invoice_item_categories` |
+| `list_estimates` | `GET /v2/estimates` |
+| `get_estimate` | `GET /v2/estimates/{ESTIMATE_ID}` |
 | `update_project_user_assignment` | `PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}` |
 
 Official `assign_user_to_project` accepts **only** `project_id` + `user_id`. Set rates with `update_project_user_assignment` (`use_default_rates` / `uses_default_rate` + `hourly_rate`).
