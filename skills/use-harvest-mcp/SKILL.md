@@ -61,7 +61,7 @@ Official remote MCP **creates and reads draft invoices** (`create_invoice`, `cre
 Use `preview_invoice_message` (`GET .../messages/new`) to fetch Harvest’s configured subject/body without sending.
 
 - After `create_invoice` / `create_invoice_from_tracked_time`, the invoice is still a **draft** until a message tool succeeds.
-- Email send (omit `event_type`), `event_type=send`, and payment `send_thank_you=true` require host `DANGEROUS_SEND=1` and Mike GO. Without that flag the tool errors; do not work around it. CoS smoke is throwaway draft + payment notes only — no send.
+- Email send (omit `event_type`), `event_type=send`, and payment `send_thank_you=true` require host `DANGEROUS_SEND=1` and Mike GO. Without that flag the tool errors; do not work around it. CoS smoke: **Pre-publish live smoke matrix** in `servers/harvest-rest/COS-RUNBOOK.md` (reads + throwaway-draft non-send mutations). No send.
 - Invoice mutations (`update_invoice`, deletes, payments, non-send messages) need **explicit user confirmation** first. Email / `event_type=send` / `send_thank_you` keep the stronger `DANGEROUS_SEND` + Mike GO gate.
 - Never claim an invoice was sent, emailed, closed, re-opened, or paid unless the corresponding `harvest-rest` tool succeeded.
 - Prefer the `harvest-invoices` skill for invoice workflows.

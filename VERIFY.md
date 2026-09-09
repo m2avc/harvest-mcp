@@ -14,7 +14,7 @@
 | `@anysphere/cursor-plugins` loader | SKIP on Grok Bot box (package/IDE loader not available the same way as Cursor IDE) |
 | Customize / Reload Window | SKIP — Grok Bot does not load `~/.cursor/plugins/local`; Marketplace/dashboard plugins only |
 | Live MCP OAuth smoke | SKIP here — host may already have a user Harvest connection separately |
-| Live harvest-rest CoS smoke | SKIP in CI — CoS via harvest-rest MCP before merge/publish (see COS-RUNBOOK). Throwaway draft on M2 internal client. No invoice email. Mike GO before Marketplace publish. |
+| Live harvest-rest CoS smoke | SKIP in CI — CoS via harvest-rest MCP before merge/publish. Full 22-tool **Pre-publish live smoke matrix** in `servers/harvest-rest/COS-RUNBOOK.md` (not only invoice + payment). Throwaway draft on M2 internal client. No invoice email. Mike GO before Marketplace publish. |
 
 ## harvest-rest unit coverage (no secrets)
 
@@ -48,9 +48,9 @@ Asserted without calling Harvest:
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**Based on main after PR #12 (including PR #4):** CoS live smoke before merge of release-affecting tools / before publish: throwaway draft on M2 internal client; `update_invoice` multi-line notes and `create_invoice_payment` notes + delete **via harvest-rest MCP**; rates read-only when rates tools change. `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag.
+**Based on main after PR #14 (including PR #12 and PR #4):** See **Pre-publish live smoke matrix** in `servers/harvest-rest/COS-RUNBOOK.md` for every harvest-rest tool (`REST_TOOL_NAMES`, 22): Required live / Optional live / Unit-only (gated), plus MCP call shapes. Morning CoS before merge of release-affecting tools / before publish is that Required-live set (reads + throwaway-draft non-send mutations), not only `update_invoice` + payment notes. Automated `test/e2e-live.test.ts` stays a subset. Cost-rate list/get/create are Administrator only. `create_user_cost_rate` and `create_invoice_item_category` stay Optional live (excluded from the Required-live bar). `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag. Rate writes and send paths stay Unit-only unless Mike confirms.
 
-Invoice e2e (not this PR’s bar):
+Automated invoice e2e (subset of the matrix; does not replace Required-live MCP calls):
 
 Set in the **local environment only**:
 
