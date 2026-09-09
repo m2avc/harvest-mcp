@@ -43,8 +43,8 @@ Official remote MCP OAuth does **not** authenticate harvest-rest. CoS connect st
 
 Read-only unless asked to change a rate. Do **not** send invoices or client invoice emails.
 
-1. **Chad** — `list_user_billable_rates` after resolving user id. Current default amount should be **145**.
-2. **Arabella** — assignment rates via official `list_project_assignments`. Report returned fields; do not invent project or client names.
+1. Operator-supplied user id — `list_user_billable_rates`. Current default (`end_date` null) amount should match the operator-supplied expected amount.
+2. Operator-supplied user id — assignment rates via official `list_project_assignments`. Report returned fields; do not invent project or client names.
 
 ## Do not
 

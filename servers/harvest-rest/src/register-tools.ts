@@ -1,6 +1,6 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
-import { errorToolResult, jsonToolResult, type HarvestClient } from "./harvest-client.js";
+import { bindRequestSignal, errorToolResult, jsonToolResult, type HarvestClient } from "./harvest-client.js";
 import { listContacts, listContactsInputSchema } from "./tools/contacts.js";
 import {
   createInvoiceMessage,
@@ -61,6 +61,10 @@ async function runTool(work: () => Promise<unknown>) {
   }
 }
 
+function toolClient(client: HarvestClient, extra: { signal: AbortSignal }): HarvestClient {
+  return bindRequestSignal(client, extra.signal);
+}
+
 /**
  * Registers Harvest REST v2 tools that the official remote MCP does not expose.
  * Invoice + user billable rates + assignment hourly rates. Do not add a second stdio server.
@@ -74,7 +78,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "PATCH /v2/invoices/{INVOICE_ID}. Update invoice header fields and line items. Create a line item by omitting id; update by sending id; delete with id + _destroy=true. Official remote MCP cannot update invoices.",
       inputSchema: updateInvoiceInputSchema,
     },
-    async (args) => runTool(() => updateInvoice(client, args)),
+    async (args, extra) => runTool(() => updateInvoice(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -84,7 +88,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       description: "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires clear user intent.",
       inputSchema: deleteInvoiceInputSchema,
     },
-    async (args) => runTool(() => deleteInvoice(client, args.invoice_id)),
+    async (args, extra) => runTool(() => deleteInvoice(toolClient(client, extra), args.invoice_id)),
   );
 
   server.registerTool(
@@ -94,7 +98,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       description: "GET /v2/invoices/{INVOICE_ID}/messages. Lists send/close/draft/re-open and email messages for an invoice.",
       inputSchema: listInvoiceMessagesInputSchema,
     },
-    async (args) => runTool(() => listInvoiceMessages(client, args)),
+    async (args, extra) => runTool(() => listInvoiceMessages(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -105,7 +109,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send are blocked unless DANGEROUS_SEND=1 (Mike GO). Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema,
     },
-    async (args) => runTool(() => createInvoiceMessage(client, args)),
+    async (args, extra) => runTool(() => createInvoiceMessage(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -116,7 +120,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/invoices/{INVOICE_ID}/messages/new. Returns Harvest-configured subject/body for a general, thank-you, or reminder message. Does not create or send a message.",
       inputSchema: previewInvoiceMessageInputSchema,
     },
-    async (args) => runTool(() => previewInvoiceMessage(client, args)),
+    async (args, extra) => runTool(() => previewInvoiceMessage(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -126,7 +130,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       description: "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}.",
       inputSchema: deleteInvoiceMessageInputSchema,
     },
-    async (args) => runTool(() => deleteInvoiceMessage(client, args.invoice_id, args.message_id)),
+    async (args, extra) => runTool(() => deleteInvoiceMessage(toolClient(client, extra), args.invoice_id, args.message_id)),
   );
 
   server.registerTool(
@@ -136,7 +140,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       description: "GET /v2/invoices/{INVOICE_ID}/payments. Official remote MCP does not expose payment records.",
       inputSchema: listInvoicePaymentsInputSchema,
     },
-    async (args) => runTool(() => listInvoicePayments(client, args)),
+    async (args, extra) => runTool(() => listInvoicePayments(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -147,7 +151,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
       inputSchema: createInvoicePaymentInputSchema,
     },
-    async (args) => runTool(() => createInvoicePayment(client, args)),
+    async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -157,7 +161,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
       description: "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}.",
       inputSchema: deleteInvoicePaymentInputSchema,
     },
-    async (args) => runTool(() => deleteInvoicePayment(client, args.invoice_id, args.payment_id)),
+    async (args, extra) => runTool(() => deleteInvoicePayment(toolClient(client, extra), args.invoice_id, args.payment_id)),
   );
 
   server.registerTool(
@@ -168,7 +172,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/contacts. Minimal helper to resolve invoice email recipients (name, email, invoice_recipient_status). Filter with client_id. Not full contacts CRUD.",
       inputSchema: listContactsInputSchema,
     },
-    async (args) => runTool(() => listContacts(client, args)),
+    async (args, extra) => runTool(() => listContacts(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -179,7 +183,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/users/{USER_ID}/billable_rates. Lists a user's default billable rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit billable rates.",
       inputSchema: listUserBillableRatesInputSchema,
     },
-    async (args) => runTool(() => listUserBillableRates(client, args)),
+    async (args, extra) => runTool(() => listUserBillableRates(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -190,7 +194,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
       inputSchema: getUserBillableRateInputSchema,
     },
-    async (args) => runTool(() => getUserBillableRate(client, args)),
+    async (args, extra) => runTool(() => getUserBillableRate(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -201,7 +205,7 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "POST /v2/users/{USER_ID}/billable_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
       inputSchema: createUserBillableRateInputSchema,
     },
-    async (args) => runTool(() => createUserBillableRate(client, args)),
+    async (args, extra) => runTool(() => createUserBillableRate(toolClient(client, extra), args)),
   );
 
   server.registerTool(
@@ -212,6 +216,6 @@ export function registerHarvestRestTools(server: McpServer, client: HarvestClien
         "PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}. Set use_default_rates (REST) or uses_default_rate (official MCP alias) and hourly_rate. Official assign_user_to_project accepts only project_id + user_id.",
       inputSchema: updateProjectUserAssignmentInputSchema,
     },
-    async (args) => runTool(() => updateProjectUserAssignment(client, args)),
+    async (args, extra) => runTool(() => updateProjectUserAssignment(toolClient(client, extra), args)),
   );
 }

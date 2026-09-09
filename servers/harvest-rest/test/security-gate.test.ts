@@ -28,6 +28,20 @@ describe("marketplace security gate", () => {
     assert.doesNotMatch(envExample, /^DANGEROUS_SEND=1\s*$/m);
   });
 
+  it("runbooks and skills do not contain live person names, exact rates, or assigned secrets", () => {
+    const runbook = readRepo("servers/harvest-rest/COS-RUNBOOK.md");
+    const ratesSkill = readRepo("skills/harvest-rates-and-assignments/SKILL.md");
+    for (const text of [runbook, ratesSkill]) {
+      assert.doesNotMatch(text, /\bChad\b/);
+      assert.doesNotMatch(text, /\bArabella\b/);
+      assert.doesNotMatch(text, /amount(?:`)? is \*\*145\*\*/i);
+      assert.doesNotMatch(text, /HARVEST_ACCESS_TOKEN\s*=\s*["']?[A-Za-z0-9_-]{16,}/);
+      assert.doesNotMatch(text, /HARVEST_ACCOUNT_ID\s*=\s*["']?\d{4,}/);
+    }
+    assert.match(runbook, /operator-supplied/);
+    assert.match(ratesSkill, /operator-supplied/);
+  });
+
   it("test fixtures do not contain live tokens or account secrets", () => {
     const helpers = readRepo("servers/harvest-rest/test/helpers.ts");
     assert.match(helpers, /test-token/);

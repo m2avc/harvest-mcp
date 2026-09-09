@@ -21493,6 +21493,95 @@ function readHarvestEnv(env = process.env) {
 var DEFAULT_MAX_429_RETRIES = 2;
 var DEFAULT_MAX_RETRY_AFTER_MS = 3e4;
 var DEFAULT_RETRY_AFTER_MS = 1e3;
+var DEFAULT_TIMEOUT_MS = 3e4;
+function isAbortError(error2) {
+  return error2 instanceof Error && (error2.name === "AbortError" || error2.name === "TimeoutError");
+}
+function abortError(message = "The operation was aborted") {
+  const error2 = new Error(message);
+  error2.name = "AbortError";
+  return error2;
+}
+function throwIfAborted(signal) {
+  if (signal?.aborted) {
+    throw abortError();
+  }
+}
+function abortableSleep(ms, signal) {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    const onAbort = () => {
+      cleanup();
+      reject(abortError());
+    };
+    const cleanup = () => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+async function fetchWithTimeout(fetchImpl, url, init, timeoutMs) {
+  const external = init.signal ?? void 0;
+  const useTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0;
+  if (!useTimeout && external === void 0) {
+    const response = await fetchImpl(url, init);
+    const rawText = await response.text();
+    return { response, rawText };
+  }
+  const controller = new AbortController();
+  const onExternalAbort = () => {
+    controller.abort();
+  };
+  if (external !== void 0) {
+    if (external.aborted) {
+      controller.abort();
+    } else {
+      external.addEventListener("abort", onExternalAbort);
+    }
+  }
+  let timer;
+  if (useTimeout) {
+    timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+  }
+  try {
+    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const rawText = await response.text();
+    return { response, rawText };
+  } catch (error2) {
+    if (isAbortError(error2)) {
+      if (external?.aborted) {
+        throw abortError();
+      }
+      throw new Error(`Harvest API request timed out after ${timeoutMs}ms`);
+    }
+    throw error2;
+  } finally {
+    if (timer !== void 0) {
+      clearTimeout(timer);
+    }
+    external?.removeEventListener("abort", onExternalAbort);
+  }
+}
+function bindRequestSignal(client, signal) {
+  if (signal === void 0) {
+    return client;
+  }
+  return {
+    request(init) {
+      return client.request({ ...init, signal: init.signal ?? signal });
+    }
+  };
+}
 var HarvestApiError = class extends Error {
   status;
   body;
@@ -21592,11 +21681,6 @@ function harvestErrorMessage(status, parsed, rawText, retryAfterSeconds) {
   }
   return parts.join(" ");
 }
-function defaultSleep(ms) {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
 var HarvestClient = class {
   accessToken;
   accountId;
@@ -21607,6 +21691,7 @@ var HarvestClient = class {
   maxRetryAfterMs;
   defaultRetryAfterMs;
   sleepImpl;
+  timeoutMs;
   constructor(options) {
     if (options.userAgent.trim().length === 0) {
       throw new HarvestConfigError(
@@ -21621,9 +21706,11 @@ var HarvestClient = class {
     this.max429Retries = options.max429Retries ?? DEFAULT_MAX_429_RETRIES;
     this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS;
     this.defaultRetryAfterMs = options.defaultRetryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
-    this.sleepImpl = options.sleepImpl ?? defaultSleep;
+    this.sleepImpl = options.sleepImpl ?? abortableSleep;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
   async request(init) {
+    throwIfAborted(init.signal);
     const url = appendQuery(joinUrl(this.apiBase, init.path), init.query);
     const headers = {
       Authorization: `Bearer ${this.accessToken}`,
@@ -21638,20 +21725,28 @@ var HarvestClient = class {
     }
     const maxAttempts = this.max429Retries + 1;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const response = await this.fetchImpl(url, {
-        method: init.method,
-        headers,
-        body: serializedBody
-      });
-      const rawText = await response.text();
+      throwIfAborted(init.signal);
+      const { response, rawText } = await fetchWithTimeout(
+        this.fetchImpl,
+        url,
+        {
+          method: init.method,
+          headers,
+          body: serializedBody,
+          signal: init.signal
+        },
+        this.timeoutMs
+      );
       const parsed = parseJsonBody(rawText);
-      const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After")) ?? this.defaultRetryAfterMs;
-      const retryAfterSeconds = Math.ceil(retryAfterMs / 1e3);
+      const headerRetryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+      const retryAfterMs = headerRetryAfterMs ?? this.defaultRetryAfterMs;
+      const retryAfterSeconds = headerRetryAfterMs === void 0 ? void 0 : Math.ceil(headerRetryAfterMs / 1e3);
       if (response.status === 429 && attempt < this.max429Retries && retryAfterMs <= this.maxRetryAfterMs) {
-        await this.sleepImpl(retryAfterMs);
+        await this.sleepImpl(retryAfterMs, init.signal);
         continue;
       }
       if (!response.ok) {
+        const extras = response.status === 429 && retryAfterSeconds !== void 0 ? { retryAfterSeconds } : void 0;
         throw new HarvestApiError(
           response.status,
           harvestErrorMessage(
@@ -21661,7 +21756,7 @@ var HarvestClient = class {
             response.status === 429 ? retryAfterSeconds : void 0
           ),
           parsed ?? rawText,
-          response.status === 429 ? { retryAfterSeconds } : void 0
+          extras
         );
       }
       if (rawText.length === 0) {
@@ -22154,6 +22249,9 @@ async function runTool(work) {
     return errorToolResult(error2);
   }
 }
+function toolClient(client, extra) {
+  return bindRequestSignal(client, extra.signal);
+}
 function registerHarvestRestTools(server, client) {
   server.registerTool(
     "update_invoice",
@@ -22162,7 +22260,7 @@ function registerHarvestRestTools(server, client) {
       description: "PATCH /v2/invoices/{INVOICE_ID}. Update invoice header fields and line items. Create a line item by omitting id; update by sending id; delete with id + _destroy=true. Official remote MCP cannot update invoices.",
       inputSchema: updateInvoiceInputSchema
     },
-    async (args) => runTool(() => updateInvoice(client, args))
+    async (args, extra) => runTool(() => updateInvoice(toolClient(client, extra), args))
   );
   server.registerTool(
     "delete_invoice",
@@ -22171,7 +22269,7 @@ function registerHarvestRestTools(server, client) {
       description: "DELETE /v2/invoices/{INVOICE_ID}. Permanently deletes the invoice. Requires clear user intent.",
       inputSchema: deleteInvoiceInputSchema
     },
-    async (args) => runTool(() => deleteInvoice(client, args.invoice_id))
+    async (args, extra) => runTool(() => deleteInvoice(toolClient(client, extra), args.invoice_id))
   );
   server.registerTool(
     "list_invoice_messages",
@@ -22180,7 +22278,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoices/{INVOICE_ID}/messages. Lists send/close/draft/re-open and email messages for an invoice.",
       inputSchema: listInvoiceMessagesInputSchema
     },
-    async (args) => runTool(() => listInvoiceMessages(client, args))
+    async (args, extra) => runTool(() => listInvoiceMessages(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_invoice_message",
@@ -22189,7 +22287,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send are blocked unless DANGEROUS_SEND=1 (Mike GO). Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema
     },
-    async (args) => runTool(() => createInvoiceMessage(client, args))
+    async (args, extra) => runTool(() => createInvoiceMessage(toolClient(client, extra), args))
   );
   server.registerTool(
     "preview_invoice_message",
@@ -22198,7 +22296,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoices/{INVOICE_ID}/messages/new. Returns Harvest-configured subject/body for a general, thank-you, or reminder message. Does not create or send a message.",
       inputSchema: previewInvoiceMessageInputSchema
     },
-    async (args) => runTool(() => previewInvoiceMessage(client, args))
+    async (args, extra) => runTool(() => previewInvoiceMessage(toolClient(client, extra), args))
   );
   server.registerTool(
     "delete_invoice_message",
@@ -22207,7 +22305,7 @@ function registerHarvestRestTools(server, client) {
       description: "DELETE /v2/invoices/{INVOICE_ID}/messages/{MESSAGE_ID}.",
       inputSchema: deleteInvoiceMessageInputSchema
     },
-    async (args) => runTool(() => deleteInvoiceMessage(client, args.invoice_id, args.message_id))
+    async (args, extra) => runTool(() => deleteInvoiceMessage(toolClient(client, extra), args.invoice_id, args.message_id))
   );
   server.registerTool(
     "list_invoice_payments",
@@ -22216,7 +22314,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/invoices/{INVOICE_ID}/payments. Official remote MCP does not expose payment records.",
       inputSchema: listInvoicePaymentsInputSchema
     },
-    async (args) => runTool(() => listInvoicePayments(client, args))
+    async (args, extra) => runTool(() => listInvoicePayments(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_invoice_payment",
@@ -22225,7 +22323,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
       inputSchema: createInvoicePaymentInputSchema
     },
-    async (args) => runTool(() => createInvoicePayment(client, args))
+    async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), args))
   );
   server.registerTool(
     "delete_invoice_payment",
@@ -22234,7 +22332,7 @@ function registerHarvestRestTools(server, client) {
       description: "DELETE /v2/invoices/{INVOICE_ID}/payments/{PAYMENT_ID}.",
       inputSchema: deleteInvoicePaymentInputSchema
     },
-    async (args) => runTool(() => deleteInvoicePayment(client, args.invoice_id, args.payment_id))
+    async (args, extra) => runTool(() => deleteInvoicePayment(toolClient(client, extra), args.invoice_id, args.payment_id))
   );
   server.registerTool(
     "list_contacts",
@@ -22243,7 +22341,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/contacts. Minimal helper to resolve invoice email recipients (name, email, invoice_recipient_status). Filter with client_id. Not full contacts CRUD.",
       inputSchema: listContactsInputSchema
     },
-    async (args) => runTool(() => listContacts(client, args))
+    async (args, extra) => runTool(() => listContacts(toolClient(client, extra), args))
   );
   server.registerTool(
     "list_user_billable_rates",
@@ -22252,7 +22350,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/users/{USER_ID}/billable_rates. Lists a user's default billable rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator or Manager permission to edit billable rates.",
       inputSchema: listUserBillableRatesInputSchema
     },
-    async (args) => runTool(() => listUserBillableRates(client, args))
+    async (args, extra) => runTool(() => listUserBillableRates(toolClient(client, extra), args))
   );
   server.registerTool(
     "get_user_billable_rate",
@@ -22261,7 +22359,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/users/{USER_ID}/billable_rates/{BILLABLE_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
       inputSchema: getUserBillableRateInputSchema
     },
-    async (args) => runTool(() => getUserBillableRate(client, args))
+    async (args, extra) => runTool(() => getUserBillableRate(toolClient(client, extra), args))
   );
   server.registerTool(
     "create_user_billable_rate",
@@ -22270,7 +22368,7 @@ function registerHarvestRestTools(server, client) {
       description: "POST /v2/users/{USER_ID}/billable_rates. amount is required; start_date is optional (YYYY-MM-DD, not in the future). Creating with no start_date replaces existing rate(s). Official remote MCP does not expose this.",
       inputSchema: createUserBillableRateInputSchema
     },
-    async (args) => runTool(() => createUserBillableRate(client, args))
+    async (args, extra) => runTool(() => createUserBillableRate(toolClient(client, extra), args))
   );
   server.registerTool(
     "update_project_user_assignment",
@@ -22279,7 +22377,7 @@ function registerHarvestRestTools(server, client) {
       description: "PATCH /v2/projects/{PROJECT_ID}/user_assignments/{USER_ASSIGNMENT_ID}. Set use_default_rates (REST) or uses_default_rate (official MCP alias) and hourly_rate. Official assign_user_to_project accepts only project_id + user_id.",
       inputSchema: updateProjectUserAssignmentInputSchema
     },
-    async (args) => runTool(() => updateProjectUserAssignment(client, args))
+    async (args, extra) => runTool(() => updateProjectUserAssignment(toolClient(client, extra), args))
   );
 }
 

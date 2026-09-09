@@ -125,10 +125,10 @@ Pass: payment `notes` match character-for-character (`list_invoice_payments` mus
 
 When the PR touches billable rates, cost rates, or assignment rates:
 
-1. Official `list_users` → **Chad** → harvest-rest `list_user_billable_rates`. Pass: current rate (`end_date` null) `amount` is **145**.
-2. Official `list_users` → **Arabella** → official `list_project_assignments`. Report `uses_default_rate` / `hourly_rate` as returned.
+1. Official `list_users` → operator-supplied user id → harvest-rest `list_user_billable_rates`. Pass: current rate (`end_date` null) `amount` matches the operator-supplied expected amount.
+2. Official `list_users` → operator-supplied user id → official `list_project_assignments`. Report `uses_default_rate` / `hourly_rate` as returned.
 
-Do not invent ids.
+Do not invent ids. Do not commit person names or exact live rates.
 
 ### Do not call in smoke
 

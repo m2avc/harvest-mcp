@@ -5,7 +5,11 @@ export type HarvestRequestInit = {
   path: string;
   query?: Record<string, string | number | boolean | undefined>;
   body?: unknown;
+  /** MCP / caller AbortSignal. Combined with the per-attempt timeout. */
+  signal?: AbortSignal;
 };
+
+export type HarvestSleep = (ms: number, signal?: AbortSignal) => Promise<void>;
 
 export type HarvestClientOptions = {
   accessToken: string;
@@ -17,9 +21,11 @@ export type HarvestClientOptions = {
   max429Retries?: number;
   /** Do not sleep longer than this for Retry-After; throw instead. Default 30s. */
   maxRetryAfterMs?: number;
-  /** Used when Harvest omits Retry-After. Default 1s. */
+  /** Used when Harvest omits Retry-After. Default 1s. Sleep only — not error metadata. */
   defaultRetryAfterMs?: number;
-  sleepImpl?: (ms: number) => Promise<void>;
+  sleepImpl?: HarvestSleep;
+  /** Per-attempt timeout covering headers + body. Default 30s. Set `0` to disable. */
+  timeoutMs?: number;
 };
 
 export type HarvestApiErrorExtras = {
@@ -29,6 +35,133 @@ export type HarvestApiErrorExtras = {
 export const DEFAULT_MAX_429_RETRIES = 2;
 export const DEFAULT_MAX_RETRY_AFTER_MS = 30_000;
 export const DEFAULT_RETRY_AFTER_MS = 1_000;
+export const DEFAULT_TIMEOUT_MS = 30_000;
+
+export function isAbortError(error: unknown): boolean {
+  return error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError");
+}
+
+export function abortError(message = "The operation was aborted"): Error {
+  const error = new Error(message);
+  error.name = "AbortError";
+  return error;
+}
+
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    throw abortError();
+  }
+}
+
+/**
+ * Abortable sleep used for 429 Retry-After waits. Rejects with AbortError when
+ * `signal` fires so an MCP cancellation is not stuck on the default wait.
+ */
+export function abortableSleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (signal?.aborted) {
+      reject(abortError());
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+
+    const onAbort = (): void => {
+      cleanup();
+      reject(abortError());
+    };
+
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      signal?.removeEventListener("abort", onAbort);
+    };
+
+    signal?.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+export type TimedFetchResult = {
+  response: Response;
+  rawText: string;
+};
+
+/**
+ * Per-attempt fetch. Timeout stays armed until `response.text()` settles so a
+ * slow or unclosed body cannot hang after headers arrive. Caller AbortSignal
+ * is combined with the timeout controller.
+ */
+export async function fetchWithTimeout(
+  fetchImpl: typeof fetch,
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+): Promise<TimedFetchResult> {
+  const external = init.signal ?? undefined;
+  const useTimeout = Number.isFinite(timeoutMs) && timeoutMs > 0;
+
+  if (!useTimeout && external === undefined) {
+    const response = await fetchImpl(url, init);
+    const rawText = await response.text();
+    return { response, rawText };
+  }
+
+  const controller = new AbortController();
+  const onExternalAbort = (): void => {
+    controller.abort();
+  };
+
+  if (external !== undefined) {
+    if (external.aborted) {
+      controller.abort();
+    } else {
+      external.addEventListener("abort", onExternalAbort);
+    }
+  }
+
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  if (useTimeout) {
+    timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+  }
+
+  try {
+    const response = await fetchImpl(url, { ...init, signal: controller.signal });
+    const rawText = await response.text();
+    return { response, rawText };
+  } catch (error) {
+    if (isAbortError(error)) {
+      if (external?.aborted) {
+        throw abortError();
+      }
+      throw new Error(`Harvest API request timed out after ${timeoutMs}ms`);
+    }
+    throw error;
+  } finally {
+    if (timer !== undefined) {
+      clearTimeout(timer);
+    }
+    external?.removeEventListener("abort", onExternalAbort);
+  }
+}
+
+/**
+ * Bind an MCP (or test) AbortSignal onto every `request` so tool handlers do
+ * not each thread `extra.signal` through every path/query/body call.
+ */
+export function bindRequestSignal(client: HarvestClient, signal?: AbortSignal): HarvestClient {
+  if (signal === undefined) {
+    return client;
+  }
+  return {
+    request<T>(init: HarvestRequestInit): Promise<T> {
+      return client.request<T>({ ...init, signal: init.signal ?? signal });
+    },
+  } as HarvestClient;
+}
 
 export class HarvestApiError extends Error {
   readonly status: number;
@@ -146,12 +279,6 @@ export function harvestErrorMessage(
   return parts.join(" ");
 }
 
-function defaultSleep(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
 export class HarvestClient {
   private readonly accessToken: string;
   private readonly accountId: string;
@@ -161,7 +288,8 @@ export class HarvestClient {
   private readonly max429Retries: number;
   private readonly maxRetryAfterMs: number;
   private readonly defaultRetryAfterMs: number;
-  private readonly sleepImpl: (ms: number) => Promise<void>;
+  private readonly sleepImpl: HarvestSleep;
+  private readonly timeoutMs: number;
 
   constructor(options: HarvestClientOptions) {
     if (options.userAgent.trim().length === 0) {
@@ -177,10 +305,13 @@ export class HarvestClient {
     this.max429Retries = options.max429Retries ?? DEFAULT_MAX_429_RETRIES;
     this.maxRetryAfterMs = options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS;
     this.defaultRetryAfterMs = options.defaultRetryAfterMs ?? DEFAULT_RETRY_AFTER_MS;
-    this.sleepImpl = options.sleepImpl ?? defaultSleep;
+    this.sleepImpl = options.sleepImpl ?? abortableSleep;
+    this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   }
 
   async request<T>(init: HarvestRequestInit): Promise<T> {
+    throwIfAborted(init.signal);
+
     const url = appendQuery(joinUrl(this.apiBase, init.path), init.query);
     const headers: Record<string, string> = {
       Authorization: `Bearer ${this.accessToken}`,
@@ -197,23 +328,34 @@ export class HarvestClient {
 
     const maxAttempts = this.max429Retries + 1;
     for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
-      const response = await this.fetchImpl(url, {
-        method: init.method,
-        headers,
-        body: serializedBody,
-      });
+      throwIfAborted(init.signal);
 
-      const rawText = await response.text();
+      const { response, rawText } = await fetchWithTimeout(
+        this.fetchImpl,
+        url,
+        {
+          method: init.method,
+          headers,
+          body: serializedBody,
+          signal: init.signal,
+        },
+        this.timeoutMs,
+      );
+
       const parsed = parseJsonBody(rawText);
-      const retryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After")) ?? this.defaultRetryAfterMs;
-      const retryAfterSeconds = Math.ceil(retryAfterMs / 1000);
+      const headerRetryAfterMs = parseRetryAfterMs(response.headers.get("Retry-After"));
+      const retryAfterMs = headerRetryAfterMs ?? this.defaultRetryAfterMs;
+      const retryAfterSeconds =
+        headerRetryAfterMs === undefined ? undefined : Math.ceil(headerRetryAfterMs / 1000);
 
       if (response.status === 429 && attempt < this.max429Retries && retryAfterMs <= this.maxRetryAfterMs) {
-        await this.sleepImpl(retryAfterMs);
+        await this.sleepImpl(retryAfterMs, init.signal);
         continue;
       }
 
       if (!response.ok) {
+        const extras =
+          response.status === 429 && retryAfterSeconds !== undefined ? { retryAfterSeconds } : undefined;
         throw new HarvestApiError(
           response.status,
           harvestErrorMessage(
@@ -223,7 +365,7 @@ export class HarvestClient {
             response.status === 429 ? retryAfterSeconds : undefined,
           ),
           parsed ?? rawText,
-          response.status === 429 ? { retryAfterSeconds } : undefined,
+          extras,
         );
       }
 

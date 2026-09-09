@@ -25,11 +25,12 @@ export type MockResponseSpec = {
 
 export function createMockClient(options?: MockResponseSpec & {
   responses?: MockResponseSpec[];
-  sleepImpl?: (ms: number) => Promise<void>;
+  sleepImpl?: (ms: number, signal?: AbortSignal) => Promise<void>;
   userAgent?: string;
   max429Retries?: number;
   maxRetryAfterMs?: number;
   defaultRetryAfterMs?: number;
+  timeoutMs?: number;
 }): { client: HarvestClient; requests: RecordedRequest[]; sleeps: number[] } {
   const requests: RecordedRequest[] = [];
   const sleeps: number[] = [];
@@ -82,6 +83,7 @@ export function createMockClient(options?: MockResponseSpec & {
     max429Retries: options?.max429Retries,
     maxRetryAfterMs: options?.maxRetryAfterMs,
     defaultRetryAfterMs: options?.defaultRetryAfterMs,
+    timeoutMs: options?.timeoutMs,
   });
 
   return { client, requests, sleeps };

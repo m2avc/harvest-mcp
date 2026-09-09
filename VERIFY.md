@@ -9,7 +9,7 @@
 | harvest-rest P0 tools | PASS (invoice tools + `list_user_billable_rates`, `get_user_billable_rate`, `create_user_billable_rate`, `update_project_user_assignment`) — **one** stdio server |
 | Unit tests | PASS → `cd servers/harvest-rest && npm test` (invoice + rates paths; no live creds). CI: `.github/workflows/ci.yml` on every PR. |
 | Typecheck + bundle | PASS → `npm run typecheck && npm run build` |
-| Public-safe scan | PASS (README + skills: no private client names / tokens / Account IDs) |
+| Public-safe scan | PASS (mcp.json, .env.example, COS-RUNBOOK, skills: no tokens / Account IDs / live person names / exact rates) |
 | Local install path | PASS → `~/.cursor/plugins/local/harvest-mcp` (real directory copy, not symlink to workspace) when proven on Cursor IDE |
 | `@anysphere/cursor-plugins` loader | SKIP on Grok Bot box (package/IDE loader not available the same way as Cursor IDE) |
 | Customize / Reload Window | SKIP — Grok Bot does not load `~/.cursor/plugins/local`; Marketplace/dashboard plugins only |

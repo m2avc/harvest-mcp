@@ -13,8 +13,14 @@ import {
   readHarvestEnv,
 } from "../src/env.js";
 import {
+  abortableSleep,
+  abortError,
+  bindRequestSignal,
+  DEFAULT_TIMEOUT_MS,
   errorToolResult,
+  fetchWithTimeout,
   HarvestApiError,
+  HarvestClient,
   harvestErrorMessage,
   harvestStatusHint,
   parseRetryAfterMs,
@@ -153,6 +159,184 @@ describe("HarvestClient", () => {
 
     await client.request({ method: "GET", path: "/clients" });
     assert.deepEqual(sleeps, [250]);
+  });
+
+  it("does not invent retryAfterSeconds when 429 omits Retry-After", async () => {
+    const { client, sleeps } = createMockClient({
+      max429Retries: 0,
+      defaultRetryAfterMs: 250,
+      responses: [{ status: 429, responseText: "throttled" }],
+    });
+
+    await assert.rejects(
+      () => client.request({ method: "GET", path: "/clients" }),
+      (error: unknown) => {
+        assert.ok(error instanceof HarvestApiError);
+        assert.equal(error.status, 429);
+        assert.equal(error.retryAfterSeconds, undefined);
+        assert.doesNotMatch(error.message, /Retry-After:/);
+        const result = errorToolResult(error);
+        const parsed = JSON.parse(result.content[0]?.text ?? "{}") as { retry_after_seconds?: number };
+        assert.equal(parsed.retry_after_seconds, undefined);
+        return true;
+      },
+    );
+    assert.deepEqual(sleeps, []);
+  });
+
+  it("defaults timeoutMs to 30s and honors a caller override", async () => {
+    assert.equal(DEFAULT_TIMEOUT_MS, 30_000);
+
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seenSignal = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(abortError());
+        });
+      });
+    };
+
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 20,
+    });
+
+    await assert.rejects(() => client.request({ method: "GET", path: "/invoices/1" }), /timed out after 20ms/);
+    assert.equal(seenSignal?.aborted, true);
+  });
+
+  it("skips AbortController when timeoutMs is 0 and no caller signal", async () => {
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seenSignal = init?.signal ?? undefined;
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 0,
+    });
+    await client.request({ method: "GET", path: "/company" });
+    assert.equal(seenSignal, undefined);
+  });
+
+  it("combines MCP AbortSignal with the per-attempt timeout", async () => {
+    const controller = new AbortController();
+    let seenSignal: AbortSignal | undefined;
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      seenSignal = init?.signal ?? undefined;
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(abortError());
+        });
+      });
+    };
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 5_000,
+    });
+    const pending = client.request({ method: "GET", path: "/company", signal: controller.signal });
+    controller.abort();
+    await assert.rejects(() => pending, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.name, "AbortError");
+      return true;
+    });
+    assert.equal(seenSignal?.aborted, true);
+  });
+
+  it("aborts Retry-After sleep when the request signal aborts", async () => {
+    let sleepStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      sleepStarted = resolve;
+    });
+    const controller = new AbortController();
+    const fetchImpl: typeof fetch = async () =>
+      new Response("throttled", {
+        status: 429,
+        headers: { "Retry-After": "30" },
+      });
+    const client = new HarvestClient({
+      accessToken: "test-token",
+      accountId: "1",
+      userAgent: "harvest-rest-tests (test@example.com)",
+      fetchImpl,
+      timeoutMs: 0,
+      maxRetryAfterMs: 60_000,
+      sleepImpl: async (ms, signal) => {
+        sleepStarted();
+        await abortableSleep(ms, signal);
+      },
+    });
+    const pending = client.request({ method: "GET", path: "/users/me", signal: controller.signal });
+    await started;
+    controller.abort();
+    await assert.rejects(() => pending, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.name, "AbortError");
+      return true;
+    });
+  });
+
+  it("keeps fetchWithTimeout armed until response.text() completes", async () => {
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      return {
+        status: 200,
+        ok: true,
+        headers: new Headers({ "Content-Type": "application/json" }),
+        text: () =>
+          new Promise<string>((_resolve, reject) => {
+            init?.signal?.addEventListener("abort", () => {
+              reject(abortError());
+            });
+          }),
+      } as Response;
+    };
+
+    await assert.rejects(
+      () => fetchWithTimeout(fetchImpl, "https://api.harvestapp.com/v2/company", {}, 20),
+      /timed out after 20ms/,
+    );
+  });
+
+  it("bindRequestSignal forwards the MCP signal onto request()", async () => {
+    const controller = new AbortController();
+    const fetchImpl: typeof fetch = async (_input, init) => {
+      return new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => {
+          reject(abortError());
+        });
+      });
+    };
+    const bound = bindRequestSignal(
+      new HarvestClient({
+        accessToken: "test-token",
+        accountId: "1",
+        userAgent: "harvest-rest-tests (test@example.com)",
+        fetchImpl,
+        timeoutMs: 0,
+      }),
+      controller.signal,
+    );
+    const pending = bound.request({ method: "GET", path: "/company" });
+    controller.abort();
+    await assert.rejects(() => pending, (error: unknown) => {
+      assert.ok(error instanceof Error);
+      assert.equal(error.name, "AbortError");
+      return true;
+    });
   });
 
   it("surfaces Harvest 4xx/5xx without leaking the token", async () => {

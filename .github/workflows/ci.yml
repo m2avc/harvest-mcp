@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+# Least privilege: this workflow only checks out the PR tree and runs tests.
+permissions:
+  contents: read
+
 jobs:
   harvest-rest:
     name: harvest-rest unit tests + public-safe scan
@@ -12,10 +16,12 @@ jobs:
     timeout-minutes: 10
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
 
       - name: Setup Node
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
           cache: npm
@@ -47,6 +53,7 @@ jobs:
           set -euo pipefail
           python3 - <<'PY'
           import json
+          import re
           from pathlib import Path
 
           mcp = json.loads(Path("mcp.json").read_text())
@@ -60,5 +67,26 @@ jobs:
                   raise SystemExit(".env.example must leave HARVEST_ACCESS_TOKEN empty")
               if line.startswith("HARVEST_ACCOUNT_ID=") and line.split("=", 1)[1].strip():
                   raise SystemExit(".env.example must leave HARVEST_ACCOUNT_ID empty")
-          print("mcp.json and .env.example are placeholder-only")
+
+          # Runbooks + skills: same secret/account-ID checks, plus no live person names / exact rates.
+          docs = [Path("servers/harvest-rest/COS-RUNBOOK.md")]
+          docs.extend(sorted(Path("skills").glob("*/SKILL.md")))
+          live_name = re.compile(r"\b(Chad|Arabella)\b")
+          live_rate = re.compile(r"amount(?:`)? is \*\*145\*\*", re.I)
+          # Real-looking assignments only; placeholders like "…" or empty are allowed.
+          token_assign = re.compile(r'HARVEST_ACCESS_TOKEN\s*=\s*["\']?[A-Za-z0-9_-]{16,}')
+          account_assign = re.compile(r'HARVEST_ACCOUNT_ID\s*=\s*["\']?\d{4,}')
+          for path in docs:
+              text = path.read_text()
+              if token_assign.search(text):
+                  raise SystemExit(f"{path} must not assign a live HARVEST_ACCESS_TOKEN")
+              if account_assign.search(text):
+                  raise SystemExit(f"{path} must not contain a live HARVEST_ACCOUNT_ID")
+              if re.search(r"access_token\s*[:=]\s*['\"][A-Za-z0-9_-]{16,}", text, re.I):
+                  raise SystemExit(f"{path} must not contain an access_token value")
+              if live_name.search(text):
+                  raise SystemExit(f"{path} must not contain live Harvest person names")
+              if live_rate.search(text):
+                  raise SystemExit(f"{path} must not contain live exact rates")
+          print("mcp.json, .env.example, runbooks, and skills are public-safe")
           PY
