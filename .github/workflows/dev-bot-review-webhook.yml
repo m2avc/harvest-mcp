@@ -53,7 +53,7 @@ jobs:
             echo "Missing DEV_BOT_REVIEW_WEBHOOK_URL or DEV_BOT_REVIEW_WEBHOOK_KEY"
             exit 1
           fi
-          if [[ "$WEBHOOK_URL" != https://* ]]; then
+          if [[ "${WEBHOOK_URL,,}" != https://* ]]; then
             echo "DEV_BOT_REVIEW_WEBHOOK_URL must use https://"
             exit 1
           fi
