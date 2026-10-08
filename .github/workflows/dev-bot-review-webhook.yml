@@ -53,6 +53,10 @@ jobs:
             echo "Missing DEV_BOT_REVIEW_WEBHOOK_URL or DEV_BOT_REVIEW_WEBHOOK_KEY"
             exit 1
           fi
+          if [[ "$WEBHOOK_URL" != https://* ]]; then
+            echo "DEV_BOT_REVIEW_WEBHOOK_URL must use https://"
+            exit 1
+          fi
 
           if [[ "$EVENT_NAME" == "workflow_dispatch" ]]; then
             BODY=$(jq -n --arg repo "$REPO" '{action:"ignore",repo:$repo,probe:true}')
@@ -85,10 +89,14 @@ jobs:
           fi
 
           # No -L: do not follow redirects (would leak the webhook key).
+          HEADER_FILE="$(mktemp)"
+          trap 'rm -f -- "$HEADER_FILE"' EXIT
+          chmod 0600 "$HEADER_FILE"
+          printf 'Authorization: Bearer %s\n' "$WEBHOOK_KEY" > "$HEADER_FILE"
+          printf 'X-Automation-Key: %s\n' "$WEBHOOK_KEY" >> "$HEADER_FILE"
           http_code=$(curl -sS -m 8 -o /tmp/webhook-resp -w "%{http_code}" -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $WEBHOOK_KEY" \
-            -H "X-Automation-Key: $WEBHOOK_KEY" \
+            -H "@${HEADER_FILE}" \
             -d "$BODY")
           if [[ "$http_code" -lt 200 || "$http_code" -ge 300 ]]; then
             echo "Webhook POST failed with HTTP $http_code"
