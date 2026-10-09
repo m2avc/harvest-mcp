@@ -90,11 +90,12 @@ jobs:
 
           # No -L: do not follow redirects (would leak the webhook key).
           HEADER_FILE="$(mktemp)"
-          trap 'rm -f -- "$HEADER_FILE"' EXIT
+          RESP_FILE="$(mktemp)"
+          trap 'rm -f -- "$HEADER_FILE" "$RESP_FILE"' EXIT
           chmod 0600 "$HEADER_FILE"
           printf 'Authorization: Bearer %s\n' "$WEBHOOK_KEY" > "$HEADER_FILE"
           printf 'X-Automation-Key: %s\n' "$WEBHOOK_KEY" >> "$HEADER_FILE"
-          http_code=$(curl -sS -m 8 -o /tmp/webhook-resp -w "%{http_code}" -X POST "$WEBHOOK_URL" \
+          http_code=$(curl -sS -m 8 -o "$RESP_FILE" -w "%{http_code}" -X POST "$WEBHOOK_URL" \
             -H "Content-Type: application/json" \
             -H "@${HEADER_FILE}" \
             -d "$BODY")
