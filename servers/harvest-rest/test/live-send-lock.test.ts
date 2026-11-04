@@ -8,7 +8,9 @@ import {
   GO_REF_TRUNCATION_MARKER,
   logLiveSendAudit,
   MAX_GO_REF_LENGTH,
+  MAX_GO_REF_RAW_LENGTH,
   MIN_GO_REF_LENGTH,
+  sanitizeGoRefForOutput,
 } from "../src/env.js";
 import {
   buildCreateInvoiceMessageBody,
@@ -124,6 +126,18 @@ describe("assertDangerousSendAllowed per-call lock", () => {
     assert.match(captured.lines.join(""), new RegExp(`go_ref=${GO_REF}`));
   });
 
+  it("allows go_ref whose sanitized length is exactly the minimum", () => {
+    const go_ref = "ab\u0001\u0002cdefg";
+    assert.equal(sanitizeGoRefForOutput(go_ref), "ab cdefg");
+    assert.equal(sanitizeGoRefForOutput(go_ref).length, MIN_GO_REF_LENGTH);
+
+    const captured = captureStderr(() =>
+      assertDangerousSendAllowed("test-action", allowEnv, { confirm_live_send: true, go_ref }),
+    ) as { lines: string[]; result: unknown };
+    assert.equal(captured.result, go_ref);
+    assert.match(captured.lines.join(""), /go_ref=ab cdefg/);
+  });
+
   it("blocks in smoke, test, and HARVEST_SEND_LOCKOUT even with env + confirm", () => {
     const lockouts = [
       { ...allowEnv, HARVEST_SMOKE: "1" },
@@ -157,13 +171,26 @@ describe("assertDangerousSendAllowed per-call lock", () => {
     assert.doesNotMatch(joined, /Bearer /);
   });
 
-  it("rejects over-max go_ref at the schema", () => {
-    const overMax = "x".repeat(MAX_GO_REF_LENGTH + 1);
+  it("rejects only oversized raw go_ref at the schema DoS ceiling", () => {
+    const rawOverMaxSanitizedOk = `${"a".repeat(249)}${"\u0001".repeat(10)}${"b".repeat(250)}`;
+    assert.ok(rawOverMaxSanitizedOk.length > MAX_GO_REF_LENGTH);
+    assert.ok(rawOverMaxSanitizedOk.length <= MAX_GO_REF_RAW_LENGTH);
+    assert.equal(sanitizeGoRefForOutput(rawOverMaxSanitizedOk).length, MAX_GO_REF_LENGTH);
+
+    const parsedOk = createInvoiceMessageInputSchema.safeParse({
+      invoice_id: 13150403,
+      event_type: "send",
+      confirm_live_send: true,
+      go_ref: rawOverMaxSanitizedOk,
+    });
+    assert.equal(parsedOk.success, true);
+
+    const overRawCeiling = "x".repeat(MAX_GO_REF_RAW_LENGTH + 1);
     const parsed = createInvoiceMessageInputSchema.safeParse({
       invoice_id: 13150403,
       event_type: "send",
       confirm_live_send: true,
-      go_ref: overMax,
+      go_ref: overRawCeiling,
     });
     assert.equal(parsed.success, false);
     if (parsed.success) {
@@ -171,10 +198,10 @@ describe("assertDangerousSendAllowed per-call lock", () => {
     }
     const issue = parsed.error.issues.find((item) => item.path.join(".") === "go_ref");
     assert.ok(issue);
-    assert.match(issue.message, new RegExp(`at most ${MAX_GO_REF_LENGTH}`));
+    assert.match(issue.message, new RegExp(`at most ${MAX_GO_REF_RAW_LENGTH}`));
   });
 
-  it("rejects over-max go_ref in assertDangerousSendAllowed", () => {
+  it("rejects over-max sanitized go_ref in assertDangerousSendAllowed", () => {
     const overMax = "x".repeat(MAX_GO_REF_LENGTH + 1);
     assert.throws(
       () =>
@@ -187,6 +214,37 @@ describe("assertDangerousSendAllowed per-call lock", () => {
         assert.match(error.message, new RegExp(`at most ${MAX_GO_REF_LENGTH}`));
         assert.ok(!error.message.includes(overMax));
         assert.match(error.message, new RegExp(GO_REF_TRUNCATION_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+        return true;
+      },
+    );
+  });
+
+  it("applies the max length to the sanitized go_ref only", () => {
+    const accepted = `${"a".repeat(249)}${"\u0001".repeat(10)}${"b".repeat(250)}`;
+    assert.ok(accepted.trim().length > MAX_GO_REF_LENGTH);
+    assert.equal(sanitizeGoRefForOutput(accepted).length, MAX_GO_REF_LENGTH);
+
+    const captured = captureStderr(() =>
+      assertDangerousSendAllowed("test-action", allowEnv, {
+        confirm_live_send: true,
+        go_ref: accepted,
+      }),
+    ) as { lines: string[]; result: unknown };
+    assert.equal(captured.result, accepted);
+    assert.match(captured.lines.join(""), new RegExp(`go_ref=${sanitizeGoRefForOutput(accepted)}`));
+
+    const rejected = `${"a".repeat(250)}${"\u0001".repeat(10)}${"b".repeat(250)}`;
+    assert.equal(sanitizeGoRefForOutput(rejected).length, MAX_GO_REF_LENGTH + 1);
+    assert.throws(
+      () =>
+        assertDangerousSendAllowed("test-action", allowEnv, {
+          confirm_live_send: true,
+          go_ref: rejected,
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof DangerousSendBlockedError);
+        assert.match(error.message, new RegExp(`at most ${MAX_GO_REF_LENGTH}`));
+        assert.ok(!error.message.includes(rejected));
         return true;
       },
     );

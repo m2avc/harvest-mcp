@@ -15,8 +15,16 @@ export const DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 /** Minimum length of `go_ref` after collapsing C0 / DEL / whitespace (matches audit). */
 export const MIN_GO_REF_LENGTH = 8;
 
-/** Maximum length of `go_ref`. LLM-supplied; reject oversized quotes. */
+/** Maximum length of sanitized `go_ref` (after collapsing C0 / DEL / whitespace). */
 export const MAX_GO_REF_LENGTH = 500;
+
+/**
+ * Raw `go_ref` size/DoS ceiling on the Zod schema only.
+ * Clearly larger than `MAX_GO_REF_LENGTH` so a quote that collapses to ≤500
+ * characters is not rejected before `sanitizeGoRefForOutput`. The 500 limit
+ * applies only to the sanitized value (gate and audit).
+ */
+export const MAX_GO_REF_RAW_LENGTH = 8192;
 
 /** User-facing length rule; matches `sanitizeGoRefForOutput` then the min/max checks. */
 const GO_REF_LENGTH_HINT = `${MIN_GO_REF_LENGTH}–${MAX_GO_REF_LENGTH} characters after collapsing control characters and whitespace`;
@@ -68,8 +76,8 @@ export const liveSendConfirmationFields = {
   go_ref: z
     .string()
     .max(
-      MAX_GO_REF_LENGTH,
-      `go_ref must be at most ${MAX_GO_REF_LENGTH} characters`,
+      MAX_GO_REF_RAW_LENGTH,
+      `go_ref must be at most ${MAX_GO_REF_RAW_LENGTH} characters`,
     )
     .optional()
     .describe(
@@ -191,7 +199,7 @@ export function assertDangerousSendAllowed(
       ),
     );
   }
-  if (trimmed.length > MAX_GO_REF_LENGTH || sanitized.length > MAX_GO_REF_LENGTH) {
+  if (sanitized.length > MAX_GO_REF_LENGTH) {
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,

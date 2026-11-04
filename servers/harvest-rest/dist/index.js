@@ -21447,6 +21447,7 @@ var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc
 var DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 var MIN_GO_REF_LENGTH = 8;
 var MAX_GO_REF_LENGTH = 500;
+var MAX_GO_REF_RAW_LENGTH = 8192;
 var GO_REF_LENGTH_HINT = `${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after collapsing control characters and whitespace`;
 var GO_REF_TRUNCATION_MARKER = "\u2026[truncated]";
 var GO_REF_UNSAFE_RUN = /[\u0000-\u001F\u007F\s]+/g;
@@ -21467,8 +21468,8 @@ var liveSendConfirmationFields = {
     "Required true for email send (omit event_type), event_type=send, or send_thank_you. Per-call intent on top of DANGEROUS_SEND=1. Not sent to Harvest."
   ),
   go_ref: external_exports.string().max(
-    MAX_GO_REF_LENGTH,
-    `go_ref must be at most ${MAX_GO_REF_LENGTH} characters`
+    MAX_GO_REF_RAW_LENGTH,
+    `go_ref must be at most ${MAX_GO_REF_RAW_LENGTH} characters`
   ).optional().describe(
     `Short quote or reference to Mike's explicit GO message (${GO_REF_LENGTH_HINT}). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest.`
   )
@@ -21555,7 +21556,7 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
       )
     );
   }
-  if (trimmed.length > MAX_GO_REF_LENGTH || sanitized.length > MAX_GO_REF_LENGTH) {
+  if (sanitized.length > MAX_GO_REF_LENGTH) {
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
