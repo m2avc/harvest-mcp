@@ -44,7 +44,9 @@ Set on the **host** (Cursor MCP env or your shell). Do not put tokens in repo `m
 | `HARVEST_ACCESS_TOKEN` | yes | `Authorization: Bearer …` |
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
 | `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`). CoS may set `harvest-cos-smoke (you@example.com)`. |
-| `DANGEROUS_SEND` | no | Default **off**. Only `DANGEROUS_SEND=1` unlocks email send (omit `event_type`), `event_type=send`, and `send_thank_you=true`. Requires Mike GO. |
+| `DANGEROUS_SEND` | no | Default **off**. Only `DANGEROUS_SEND=1` unlocks email send (omit `event_type`), `event_type=send`, and `send_thank_you=true`. Requires Mike GO **and** per-call `confirm_live_send=true` + non-empty `go_ref`. |
+| `HARVEST_SMOKE` | no | Set `1` for CoS smoke. Refuses gated sends even if `DANGEROUS_SEND=1`. |
+| `HARVEST_SEND_LOCKOUT` | no | Set `1` to refuse gated sends (same effect as smoke / `NODE_ENV=test`). |
 
 Copy `servers/harvest-rest/.env.example` locally if useful. Never commit a filled `.env`.
 
@@ -59,6 +61,7 @@ npm run build
 export HARVEST_ACCESS_TOKEN="…"
 export HARVEST_ACCOUNT_ID="…"
 export HARVEST_USER_AGENT="harvest-cos-smoke (you@example.com)"
+export HARVEST_SMOKE=1
 unset DANGEROUS_SEND
 # Do not export DANGEROUS_SEND for smoke. Do not enable it.
 node dist/index.js
@@ -90,7 +93,7 @@ cd servers/harvest-rest && npm test
    - or launch Cursor from a shell that already exported those variables (host may inherit them)
 5. Confirm **one** `harvest-rest` server (not a second stdio package). Tools must include all **22** names in `REST_TOOL_NAMES` (P0 invoice/rates + P1 cost rates/categories + P2 estimates).
 
-Leave `DANGEROUS_SEND` unset. If it was previously set in Cursor MCP env, remove it and reload MCP before smoke.
+Leave `DANGEROUS_SEND` unset and set `HARVEST_SMOKE=1`. If `DANGEROUS_SEND` was previously set in Cursor MCP env, remove it and reload MCP before smoke.
 
 ## Troubleshooting: missing server vs tool failures
 
@@ -106,7 +109,7 @@ These fail for different reasons. Do not treat a tool error as “the server is 
 
 - Tokens are **lazy**. `HARVEST_ACCESS_TOKEN` and `HARVEST_ACCOUNT_ID` are read on the first tool request, not at stdio launch. A missing token does **not** hide the server.
 - Set credentials in host MCP env (or a user-local `~/.cursor/mcp.json`). Reload MCP after changing env.
-- `DANGEROUS_SEND` unset is expected for smoke; send-path tools will error until Mike GO.
+- `DANGEROUS_SEND` unset and `HARVEST_SMOKE=1` are expected for smoke; send-path tools will error until Mike GO plus `confirm_live_send` + `go_ref`.
 
 ## Pre-publish live smoke matrix
 
@@ -122,7 +125,7 @@ These fail for different reasons. Do not treat a tool error as “the server is 
 
 Rules for every live call:
 
-- `DANGEROUS_SEND` **unset**. Clear inherited env and reload MCP before starting.
+- `DANGEROUS_SEND` **unset**. Set `HARVEST_SMOKE=1`. Clear inherited send env and reload MCP before starting.
 - Never email a client. Never `event_type=send`. Never `send_thank_you=true`.
 - Throwaway **draft** on an **M2 internal client** (official `create_invoice` if needed). Confirm `state` is `draft` via official `get_invoice`.
 - Resolve ids from official list tools or from the just-returned list. Do not invent ids, last names, project names, or client names.
@@ -388,9 +391,9 @@ Out of default smoke. CI already mocks these. Live writes need an explicit opera
 | `create_user_billable_rate` | Replaces or adds a default billable rate |
 | `update_project_user_assignment` | Changes assignment `use_default_rates` / `hourly_rate` |
 | `create_user_cost_rate` with omitted, matching, or earlier `start_date` | Requires `confirm_replacement=true` (Mike GO) |
-| `create_invoice_message` omit `event_type` | Emails the client (`DANGEROUS_SEND=1` + Mike GO) |
-| `create_invoice_message` `event_type=send` | Marks a draft sent (`DANGEROUS_SEND=1` + Mike GO) |
-| `create_invoice_payment` `send_thank_you=true` | Thank-you email (`DANGEROUS_SEND=1` + Mike GO) |
+| `create_invoice_message` omit `event_type` | Emails the client (`DANGEROUS_SEND=1` + `confirm_live_send=true` + `go_ref`) |
+| `create_invoice_message` `event_type=send` | Marks a draft sent (`DANGEROUS_SEND=1` + `confirm_live_send=true` + `go_ref`) |
+| `create_invoice_payment` `send_thank_you=true` | Thank-you email (`DANGEROUS_SEND=1` + `confirm_live_send=true` + `go_ref`) |
 
 Rate-write procedure (only when an operator has explicitly asked to change a rate):
 
@@ -408,7 +411,7 @@ Rate-write procedure (only when an operator has explicitly asked to change a rat
 - `update_project_user_assignment`
 - `create_user_cost_rate` without a later `start_date`, or with `confirm_replacement`
 
-Those send and rate-write paths are unit/mocked in CI `npm test`. Live send stays behind `DANGEROUS_SEND=1` + Mike GO.
+Those send and rate-write paths are unit/mocked in CI `npm test`. Live send stays behind `DANGEROUS_SEND=1` + per-call `confirm_live_send=true` + `go_ref` (Mike GO). Smoke sets `HARVEST_SMOKE=1`.
 
 ## Marketplace publish
 

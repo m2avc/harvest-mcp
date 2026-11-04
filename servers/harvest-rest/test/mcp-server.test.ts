@@ -57,6 +57,12 @@ describe("harvest-rest MCP server", () => {
       assert.equal(paymentTool?.inputSchema?.type, "object");
       assert.ok(paymentTool?.inputSchema?.properties && "amount" in paymentTool.inputSchema.properties);
       assert.ok(paymentTool?.inputSchema?.properties && "invoice_id" in paymentTool.inputSchema.properties);
+      assert.ok(paymentTool?.inputSchema?.properties && "confirm_live_send" in paymentTool.inputSchema.properties);
+      assert.ok(paymentTool?.inputSchema?.properties && "go_ref" in paymentTool.inputSchema.properties);
+
+      const messageTool = listed.tools.find((tool) => tool.name === "create_invoice_message");
+      assert.ok(messageTool?.inputSchema?.properties && "confirm_live_send" in messageTool.inputSchema.properties);
+      assert.ok(messageTool?.inputSchema?.properties && "go_ref" in messageTool.inputSchema.properties);
     } finally {
       await mcpClient.close();
       await server.close();
@@ -73,6 +79,23 @@ describe("harvest-rest MCP server", () => {
       assert.equal(blockedSend.isError, true);
       const blockedText = JSON.stringify(blockedSend.content);
       assert.match(blockedText, /DANGEROUS_SEND/);
+    } finally {
+      await mcpClient.close();
+      await server.close();
+    }
+  });
+
+  it("allows create_invoice_message close without DANGEROUS_SEND or confirm", async () => {
+    const recorded: Array<{ url: string; bodyJson: unknown }> = [];
+    const { mcpClient, server } = await connectHarvestRest(recordingFetch(recorded));
+    try {
+      const closed = await mcpClient.callTool({
+        name: "create_invoice_message",
+        arguments: { invoice_id: 10, event_type: "close" },
+      });
+      assert.equal(closed.isError, undefined);
+      const messageRequest = recorded.find((item) => item.url.endsWith("/messages"));
+      assert.deepEqual(messageRequest?.bodyJson, { event_type: "close" });
     } finally {
       await mcpClient.close();
       await server.close();

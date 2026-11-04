@@ -519,6 +519,16 @@ describe("readHarvestEnv", () => {
     assert.throws(() => assertDangerousSendAllowed("test", { DANGEROUS_SEND: "true" }), (error: unknown) => {
       return error instanceof DangerousSendBlockedError;
     });
-    assert.doesNotThrow(() => assertDangerousSendAllowed("test", { DANGEROUS_SEND: "1" }));
+    assert.throws(
+      () => assertDangerousSendAllowed("test", { DANGEROUS_SEND: "1" }),
+      (error: unknown) => error instanceof DangerousSendBlockedError,
+    );
+    assert.doesNotThrow(() =>
+      assertDangerousSendAllowed(
+        "test",
+        { DANGEROUS_SEND: "1" },
+        { confirm_live_send: true, go_ref: "unit-test-go-ref" },
+      ),
+    );
   });
 });

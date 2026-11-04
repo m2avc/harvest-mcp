@@ -18,7 +18,7 @@ This is community packaging by M2 AV Consulting, LLC. It is **not** an official 
    - `HARVEST_ACCESS_TOKEN` — Harvest personal access token or OAuth access token
    - `HARVEST_ACCOUNT_ID` — numeric Harvest account ID
    - `HARVEST_USER_AGENT` — optional; defaults to `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` where `<semver>` is the root `package.json` `version` (integration author contact, not the end-user Harvest email). See [API v2 headers](https://help.getharvest.com/api-v2/introduction/overview/general/).
-   - `DANGEROUS_SEND` — leave unset. Only `1` (plus Mike GO) unlocks emailing, `event_type=send`, or `send_thank_you=true`
+   - `DANGEROUS_SEND` — leave unset. Only `1` (plus Mike GO) unlocks emailing, `event_type=send`, or `send_thank_you=true`. Those gated calls also need `confirm_live_send=true` and a non-empty `go_ref` (short quote of the GO, ≥8 characters after trim). `HARVEST_SMOKE=1`, `NODE_ENV=test`, or `HARVEST_SEND_LOCKOUT=1` always refuse gated sends.
 
 4. Node.js 22+ (supported LTS) is required to run `harvest-rest`. Reload / reconnect MCP if tools do not appear.
 

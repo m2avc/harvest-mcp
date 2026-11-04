@@ -18,7 +18,9 @@ Environment only (never commit):
 | `HARVEST_ACCOUNT_ID` | yes | `Harvest-Account-Id` |
 | `HARVEST_USER_AGENT` | no | `User-Agent` (default `m2avc-harvest-mcp/<semver> (mn@m2avc.com)`; `<semver>` from repo-root `package.json`). Harvest requires the integration author contact, not the end-user email. See [Overview](https://help.getharvest.com/api-v2/introduction/overview/general/). |
 | `HARVEST_API_BASE` | no | Override API root (tests) |
-| `DANGEROUS_SEND` | no | Must be `1` to email, `event_type=send`, or `send_thank_you=true`. Default off. Mike GO required. |
+| `DANGEROUS_SEND` | no | Master switch. Must be `1` to email, `event_type=send`, or `send_thank_you=true`. Default off. Mike GO required. Gated calls also need `confirm_live_send=true` and a non-empty `go_ref` (≥8 chars after collapsing control characters and whitespace; not sent to Harvest). Successful gated sends return Harvest fields at the top level plus the sanitized `go_ref`. |
+| `HARVEST_SMOKE` | no | `1` refuses gated sends even with `DANGEROUS_SEND=1` and confirm. Set for CoS smoke. |
+| `HARVEST_SEND_LOCKOUT` | no | `1` refuses gated sends (same as smoke / `NODE_ENV=test`). |
 
 Copy `.env.example` locally. Do not put tokens in plugin `mcp.json`.
 

@@ -5,7 +5,7 @@
 ## Security checklist (world-shared Marketplace plugin)
 
 - [ ] No `HARVEST_ACCESS_TOKEN` / Harvest account secrets in committed `mcp.json` or examples (placeholders only; host env only)
-- [ ] `DANGEROUS_SEND` default unset/off; email / `event_type=send` / payment thank-you are Mike-GO only
+- [ ] `DANGEROUS_SEND` default unset/off; email / `event_type=send` / payment thank-you are Mike-GO only and also require `confirm_live_send=true` + `go_ref`
 - [ ] Default User-Agent is `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json`; `HARVEST_USER_AGENT` override is documented; never derived from the end-user Harvest email/company
 - [ ] Honor Harvest `429` `Retry-After` in `harvest-client` ([Overview](https://help.getharvest.com/api-v2/introduction/overview/general/))
 - [ ] Docs state PAT vs OAuth least privilege; never log tokens or Account IDs

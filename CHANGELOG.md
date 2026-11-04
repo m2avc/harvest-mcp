@@ -9,6 +9,28 @@ Version fields that must stay equal: root `package.json`, `plugin.json`, and
 
 Do not put tokens, Account IDs, person names, or exact live rates in this file.
 
+## [0.3.1] - 2026-11-04
+
+Per-call confirmation lock on live-send paths (Mike approved 2026-11-03).
+`DANGEROUS_SEND=1` remains the master switch and still defaults off.
+
+### harvest-rest send gate
+
+- Gated calls (`create_invoice_message` with `event_type` omitted or `send`,
+  and `create_invoice_payment` with `send_thank_you=true`) now also require
+  `confirm_live_send=true` and a non-empty `go_ref` (short quote of Mike's
+  explicit GO, at least 8 characters after trim)
+- `go_ref` is audit-only: included in tool error/success text and one stderr
+  line. It is never sent to Harvest. Successful gated sends keep Harvest
+  InvoiceMessage / InvoicePayment fields at the top level and add the
+  sanitized `go_ref`. Values are capped at 500 characters; C0 / DEL /
+  whitespace runs are collapsed before the result, stderr audit line, and
+  blocked-error text (oversize echoes are truncated)
+- `HARVEST_SMOKE=1`, `NODE_ENV=test`, or `HARVEST_SEND_LOCKOUT=1` refuse gated
+  sends even when `DANGEROUS_SEND=1` and confirm/`go_ref` are present
+- `event_type` close / draft / re-open stay ungated
+- Default User-Agent is now `m2avc-harvest-mcp/0.3.1 (mn@m2avc.com)`
+
 ## [0.3.0] - 2026-09-09
 
 Marketplace republish prep. `harvest-rest` remains the plugin’s single REST

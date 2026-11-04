@@ -30,8 +30,8 @@ npm run build
 Asserted without calling Harvest:
 
 - `PATCH /v2/invoices/{id}` header + line item create / update / `_destroy`
-- `POST /v2/invoices/{id}/messages` with `event_type=send` / email path — **mocked only**, or `DANGEROUS_SEND=1`
-- Send path **blocked** when `DANGEROUS_SEND` is unset (default)
+- `POST /v2/invoices/{id}/messages` with `event_type=send` / email path — **mocked only**, or `DANGEROUS_SEND=1` + `confirm_live_send=true` + `go_ref`
+- Send path **blocked** when `DANGEROUS_SEND` is unset (default), when confirm/`go_ref` are missing, or when `HARVEST_SMOKE=1` / `NODE_ENV=test` / `HARVEST_SEND_LOCKOUT=1`
 - Email path (omit `event_type`) requires recipients or `send_me_a_copy`
 - `GET /v2/invoices/{id}/messages/new` preview
 - `POST /v2/invoices/{id}/payments` **notes character-for-character** (whitespace, quotes, unicode); `send_thank_you` forced false
@@ -48,7 +48,7 @@ Asserted without calling Harvest:
 
 See `servers/harvest-rest/COS-RUNBOOK.md` for how CoS connects (`HARVEST_ACCESS_TOKEN`, `HARVEST_ACCOUNT_ID`, `User-Agent`).
 
-**Based on main after PR #14 (including PR #12 and PR #4):** See **Pre-publish live smoke matrix** in `servers/harvest-rest/COS-RUNBOOK.md` for every harvest-rest tool (`REST_TOOL_NAMES`, 22): Required live / Optional live / Unit-only (gated), plus MCP call shapes. Morning CoS before merge of release-affecting tools / before publish is that Required-live set (reads + throwaway-draft non-send mutations), not only `update_invoice` + payment notes. Automated `test/e2e-live.test.ts` stays a subset. Cost-rate list/get/create are Administrator only. `create_user_cost_rate` and `create_invoice_item_category` stay Optional live (excluded from the Required-live bar). `DANGEROUS_SEND` unset (clear inherited env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag. Rate writes and send paths stay Unit-only unless Mike confirms.
+**Based on main after PR #14 (including PR #12 and PR #4):** See **Pre-publish live smoke matrix** in `servers/harvest-rest/COS-RUNBOOK.md` for every harvest-rest tool (`REST_TOOL_NAMES`, 22): Required live / Optional live / Unit-only (gated), plus MCP call shapes. Morning CoS before merge of release-affecting tools / before publish is that Required-live set (reads + throwaway-draft non-send mutations), not only `update_invoice` + payment notes. Automated `test/e2e-live.test.ts` stays a subset. Cost-rate list/get/create are Administrator only. `create_user_cost_rate` and `create_invoice_item_category` stay Optional live (excluded from the Required-live bar). `DANGEROUS_SEND` unset and `HARVEST_SMOKE=1` (clear inherited send env + reload MCP). No client email. **Mike human GO** before Marketplace publish or a public version tag. Rate writes and send paths stay Unit-only unless Mike confirms.
 
 Automated invoice e2e (subset of the matrix; does not replace Required-live MCP calls):
 
@@ -59,6 +59,7 @@ Set in the **local environment only**:
 - `HARVEST_E2E_INVOICE_ID` — **throwaway draft** id (not a live client invoice)
 - `HARVEST_E2E_ALLOW_MUTATIONS=1`
 - Do **not** set `DANGEROUS_SEND`
+- Set `HARVEST_SMOKE=1` (`test/e2e-live.test.ts` and `npm test` already do)
 
 Then:
 

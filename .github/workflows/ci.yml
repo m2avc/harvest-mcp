@@ -40,6 +40,7 @@ jobs:
         env:
           # Never enable send paths in CI. Live invoice email is Mike-GO only.
           DANGEROUS_SEND: ""
+          HARVEST_SMOKE: "1"
         run: |
           mapfile -t files < <(find test -name '*.test.ts' | sort)
           if [ ${#files[@]} -eq 0 ]; then
