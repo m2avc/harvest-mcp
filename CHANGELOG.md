@@ -21,7 +21,9 @@ Per-call confirmation lock on live-send paths (Mike approved 2026-11-03).
   `confirm_live_send=true` and a non-empty `go_ref` (short quote of Mike's
   explicit GO, at least 8 characters after trim)
 - `go_ref` is audit-only: included in tool error/success text and one stderr
-  line. It is never sent to Harvest
+  line. It is never sent to Harvest. Values are capped at 500 characters;
+  C0 / DEL / whitespace runs are collapsed before the stderr audit line and
+  blocked-error text (oversize echoes are truncated)
 - `HARVEST_SMOKE=1`, `NODE_ENV=test`, or `HARVEST_SEND_LOCKOUT=1` refuse gated
   sends even when `DANGEROUS_SEND=1` and confirm/`go_ref` are present
 - `event_type` close / draft / re-open stay ungated

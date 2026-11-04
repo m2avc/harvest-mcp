@@ -21446,6 +21446,9 @@ var PACKAGE_VERSION = package_default.version;
 var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 var DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 var MIN_GO_REF_LENGTH = 8;
+var MAX_GO_REF_LENGTH = 500;
+var GO_REF_TRUNCATION_MARKER = "\u2026[truncated]";
+var GO_REF_UNSAFE_RUN = /[\u0000-\u001F\u007F\s]+/g;
 var HarvestConfigError = class extends Error {
   constructor(message) {
     super(message);
@@ -21462,8 +21465,11 @@ var liveSendConfirmationFields = {
   confirm_live_send: external_exports.boolean().optional().describe(
     "Required true for email send (omit event_type), event_type=send, or send_thank_you. Per-call intent on top of DANGEROUS_SEND=1. Not sent to Harvest."
   ),
-  go_ref: external_exports.string().optional().describe(
-    "Short quote or reference to Mike's explicit GO message (at least 8 characters after trim). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest."
+  go_ref: external_exports.string().max(
+    MAX_GO_REF_LENGTH,
+    `go_ref must be at most ${MAX_GO_REF_LENGTH} characters`
+  ).optional().describe(
+    `Short quote or reference to Mike's explicit GO message (${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest.`
   )
 };
 function isDangerousSendEnabled(env = process.env) {
@@ -21472,12 +21478,21 @@ function isDangerousSendEnabled(env = process.env) {
 function isSendLockoutEnabled(env = process.env) {
   return env.HARVEST_SMOKE === "1" || env.NODE_ENV === "test" || env.HARVEST_SEND_LOCKOUT === "1";
 }
+function sanitizeGoRefForOutput(goRef) {
+  return goRef.replace(GO_REF_UNSAFE_RUN, " ").trim();
+}
+function truncateGoRefForEcho(sanitized) {
+  if (sanitized.length <= MAX_GO_REF_LENGTH) {
+    return sanitized;
+  }
+  return `${sanitized.slice(0, MAX_GO_REF_LENGTH)}${GO_REF_TRUNCATION_MARKER}`;
+}
 function formatGoRefForMessage(goRef) {
   if (goRef === void 0) {
     return "(missing)";
   }
-  const trimmed = goRef.trim();
-  return trimmed.length === 0 ? "(empty)" : trimmed;
+  const sanitized = sanitizeGoRefForOutput(goRef);
+  return sanitized.length === 0 ? "(empty)" : truncateGoRefForEcho(sanitized);
 }
 function readGoRef(goRef) {
   if (goRef === void 0) {
@@ -21492,7 +21507,7 @@ function attachLiveSendAudit(harvest, goRef) {
 function logLiveSendAudit(action, goRef, write = (line) => {
   process.stderr.write(line);
 }) {
-  const oneLine = goRef.replace(/\s+/g, " ").trim();
+  const oneLine = truncateGoRefForEcho(sanitizeGoRefForOutput(goRef));
   write(`harvest-rest live send: action=${action} go_ref=${oneLine}
 `);
 }
@@ -21514,7 +21529,7 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        "DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, at least 8 characters after trim) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.",
+        `DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`,
         goRef
       )
     );
@@ -21523,7 +21538,7 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        "confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, at least 8 characters after trim). Do not email real client invoices or mark them sent in smoke tests.",
+        `confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
         goRef
       )
     );
@@ -21533,7 +21548,16 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `go_ref must be a non-empty string (short quote of Mike's explicit GO, at least ${MIN_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        `go_ref must be a non-empty string (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        goRef
+      )
+    );
+  }
+  if (trimmed.length > MAX_GO_REF_LENGTH) {
+    throw new DangerousSendBlockedError(
+      blockedMessage(
+        action,
+        `go_ref must be at most ${MAX_GO_REF_LENGTH} characters after trim. Do not email real client invoices or mark them sent in smoke tests.`,
         goRef
       )
     );

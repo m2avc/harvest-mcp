@@ -5,6 +5,9 @@ import {
   assertDangerousSendAllowed,
   attachLiveSendAudit,
   DangerousSendBlockedError,
+  GO_REF_TRUNCATION_MARKER,
+  logLiveSendAudit,
+  MAX_GO_REF_LENGTH,
   MIN_GO_REF_LENGTH,
 } from "../src/env.js";
 import {
@@ -130,6 +133,76 @@ describe("assertDangerousSendAllowed per-call lock", () => {
     assert.match(joined, new RegExp(`go_ref=${GO_REF}`));
     assert.doesNotMatch(joined, /test-token/);
     assert.doesNotMatch(joined, /Bearer /);
+  });
+
+  it("rejects over-max go_ref at the schema", () => {
+    const overMax = "x".repeat(MAX_GO_REF_LENGTH + 1);
+    const parsed = createInvoiceMessageInputSchema.safeParse({
+      invoice_id: 13150403,
+      event_type: "send",
+      confirm_live_send: true,
+      go_ref: overMax,
+    });
+    assert.equal(parsed.success, false);
+    if (parsed.success) {
+      return;
+    }
+    const issue = parsed.error.issues.find((item) => item.path.join(".") === "go_ref");
+    assert.ok(issue);
+    assert.match(issue.message, new RegExp(`at most ${MAX_GO_REF_LENGTH}`));
+  });
+
+  it("rejects over-max go_ref in assertDangerousSendAllowed", () => {
+    const overMax = "x".repeat(MAX_GO_REF_LENGTH + 1);
+    assert.throws(
+      () =>
+        assertDangerousSendAllowed("test-action", allowEnv, {
+          confirm_live_send: true,
+          go_ref: overMax,
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof DangerousSendBlockedError);
+        assert.match(error.message, new RegExp(`at most ${MAX_GO_REF_LENGTH}`));
+        assert.ok(!error.message.includes(overMax));
+        assert.match(error.message, new RegExp(GO_REF_TRUNCATION_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+        return true;
+      },
+    );
+  });
+
+  it("strips control chars and ANSI escapes from the stderr audit line", () => {
+    const dirty = `unit-test\u001b[31m-go-ref\u0007\u007f`;
+    const lines: string[] = [];
+    logLiveSendAudit("test-action", dirty, (line) => {
+      lines.push(line);
+    });
+    const joined = lines.join("");
+    assert.match(joined, /harvest-rest live send:/);
+    assert.match(joined, /go_ref=unit-test \[31m-go-ref$/m);
+    assert.doesNotMatch(joined, /\u001b/);
+    assert.doesNotMatch(joined.replace(/\n$/, ""), /[\u0000-\u001F\u007F]/);
+    assert.equal(joined.endsWith("\n"), true);
+  });
+
+  it("blocked message does not echo raw control chars or unbounded go_ref", () => {
+    const dirtyHuge = `\u001b[31m${"x".repeat(MAX_GO_REF_LENGTH + 80)}\u0007`;
+    assert.throws(
+      () =>
+        assertDangerousSendAllowed("test-action", {}, {
+          confirm_live_send: true,
+          go_ref: dirtyHuge,
+        }),
+      (error: unknown) => {
+        assert.ok(error instanceof DangerousSendBlockedError);
+        assert.doesNotMatch(error.message, /\u001b/);
+        assert.doesNotMatch(error.message, /[\u0000-\u001F\u007F]/);
+        assert.ok(!error.message.includes(dirtyHuge));
+        assert.ok(!error.message.includes("x".repeat(MAX_GO_REF_LENGTH + 1)));
+        assert.match(error.message, /\[31m/);
+        assert.match(error.message, new RegExp(GO_REF_TRUNCATION_MARKER.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+        return true;
+      },
+    );
   });
 });
 
