@@ -23,7 +23,7 @@ Do **not** implement every missing domain endpoint in the P0 reliability PR. Use
 | `todo` | Not implemented; backlog |
 | `n/a` | Docs-only page, or not a harvest-rest concern (official MCP / Harvest ID OAuth) |
 
-`DANGEROUS_SEND` stays **unset by default**. No live client invoice emails in tests.
+`DANGEROUS_SEND` stays **unset by default**. Gated live sends also need `confirm_live_send=true` and a non-empty `go_ref`. No live client invoice emails in tests (`HARVEST_SMOKE=1`).
 
 ---
 
@@ -157,11 +157,11 @@ Line items are **not** a separate resource: create/update/`_destroy` on `POST/PA
 | PATCH | `/v2/invoices/{INVOICE_ID}` + line items | `update_invoice` | — | P0 invoices | done (REST) |
 | DELETE | `/v2/invoices/{INVOICE_ID}` | `delete_invoice` | — | P0 invoices | done (REST) |
 | GET | `/v2/invoices/{ID}/messages` | `list_invoice_messages` | — | P0 invoices | done (REST) |
-| POST | `/v2/invoices/{ID}/messages` (email / `event_type`) | `create_invoice_message` (email + `send` gated by `DANGEROUS_SEND`) | — | P0 invoices | done (REST) |
+| POST | `/v2/invoices/{ID}/messages` (email / `event_type`) | `create_invoice_message` (email + `send` gated by `DANGEROUS_SEND` + `confirm_live_send` + `go_ref`) | — | P0 invoices | done (REST) |
 | GET | `/v2/invoices/{ID}/messages/new` | `preview_invoice_message` | — | P0 invoices | done (REST) |
 | DELETE | `/v2/invoices/{ID}/messages/{MESSAGE_ID}` | `delete_invoice_message` | — | P0 invoices | done (REST) |
 | GET | `/v2/invoices/{ID}/payments` | `list_invoice_payments` | — | P0 invoices | done (REST) |
-| POST | `/v2/invoices/{ID}/payments` | `create_invoice_payment` (`send_thank_you` gated) | — | P0 invoices | done (REST) |
+| POST | `/v2/invoices/{ID}/payments` | `create_invoice_payment` (`send_thank_you` gated by `DANGEROUS_SEND` + `confirm_live_send` + `go_ref`) | — | P0 invoices | done (REST) |
 | DELETE | `/v2/invoices/{ID}/payments/{PAYMENT_ID}` | `delete_invoice_payment` | — | P0 invoices | done (REST) |
 | GET | `/v2/invoice_item_categories` | `list_invoice_item_categories` | — | P1 | done (REST) |
 | GET | `/v2/invoice_item_categories/{ID}` | `get_invoice_item_category` | — | P1 | done (REST) |
@@ -331,7 +331,7 @@ Official MCP also has `submit_feedback` (not a v2 REST resource).
 | Default UA | `m2avc-harvest-mcp/<semver> (mn@m2avc.com)` from root `package.json` | P0 done |
 | UA override | `HARVEST_USER_AGENT` | P0 done |
 | UA not from customer identity | No dynamic email/company UA | P0 done |
-| `DANGEROUS_SEND` | Default off; `1` + Mike GO for live send | done |
+| `DANGEROUS_SEND` | Default off; `1` + Mike GO + `confirm_live_send` + `go_ref` for live send | done |
 | Skills map 35 official tools + REST gaps | `skills/use-harvest-mcp` | done (P1 cost rates + invoice item categories listed) |
 
 ---
@@ -376,4 +376,4 @@ Official MCP also has `submit_feedback` (not a v2 REST resource).
 - Does not add domain tools beyond those already on `feat/p0-billable-rates-assignments`.
 - Does not touch or undraft invoice PR #1 or rates PR #2.
 - Does not implement Harvest ID OAuth (official remote MCP already does).
-- Does not send real client invoices (`DANGEROUS_SEND` remains off in tests).
+- Does not send real client invoices (`DANGEROUS_SEND` remains off in tests; `HARVEST_SMOKE=1` lockout).

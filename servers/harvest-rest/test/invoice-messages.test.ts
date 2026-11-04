@@ -14,6 +14,7 @@ import {
 import { createMockClient } from "./helpers.js";
 
 const allowSend = { DANGEROUS_SEND: "1" };
+const liveConfirm = { confirm_live_send: true as const, go_ref: "unit-test-go-ref" };
 
 describe("create_invoice_message", () => {
   it("blocks event_type=send unless DANGEROUS_SEND=1", async () => {
@@ -39,10 +40,14 @@ describe("create_invoice_message", () => {
     const input = createInvoiceMessageInputSchema.parse({
       invoice_id: 13150403,
       event_type: "send",
+      ...liveConfirm,
     });
     const result = await createInvoiceMessage(client, input, allowSend);
 
-    assert.deepEqual(result, { id: 27835325, event_type: "send" });
+    assert.deepEqual(result, {
+      harvest: { id: 27835325, event_type: "send" },
+      go_ref: liveConfirm.go_ref,
+    });
     assert.equal(requests[0]?.method, "POST");
     assert.equal(requests[0]?.url, "https://api.harvestapp.com/v2/invoices/13150403/messages");
     assert.deepEqual(requests[0]?.bodyJson, { event_type: "send" });
@@ -84,6 +89,7 @@ describe("create_invoice_message", () => {
       attach_pdf: true,
       send_me_a_copy: true,
       recipients: [{ name: "Richard Roe", email: "richard@example.com" }],
+      ...liveConfirm,
     });
     await createInvoiceMessage(client, input, allowSend);
 

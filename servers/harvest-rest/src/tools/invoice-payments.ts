@@ -1,6 +1,11 @@
 import { z } from "zod";
 
-import { assertDangerousSendAllowed } from "../env.js";
+import {
+  assertDangerousSendAllowed,
+  attachLiveSendAudit,
+  liveSendConfirmationFields,
+  readGoRef,
+} from "../env.js";
 import type { HarvestClient } from "../harvest-client.js";
 
 /** Plain ZodObject for MCP SDK introspection (`registerTool` inputSchema). */
@@ -12,6 +17,7 @@ export const createInvoicePaymentFieldsSchema = z
     paid_date: z.string().optional(),
     notes: z.string().optional(),
     send_thank_you: z.boolean().optional(),
+    ...liveSendConfirmationFields,
   })
   .strict();
 
@@ -48,8 +54,10 @@ export type CreateInvoicePaymentInput = z.infer<typeof createInvoicePaymentInput
  * Build the Harvest payment POST body. `notes` is copied by reference with no
  * trim / rewrite — character-for-character preservation is required.
  *
- * `send_thank_you` is forced false unless explicitly true *and* DANGEROUS_SEND=1,
- * so we never inherit Harvest's default thank-you email on full payment.
+ * `send_thank_you` is forced false unless explicitly true *and* DANGEROUS_SEND=1
+ * *and* confirm_live_send=true with a non-empty go_ref, so we never inherit
+ * Harvest's default thank-you email on full payment. confirm_live_send / go_ref
+ * are never copied into the Harvest body.
  */
 export function buildCreateInvoicePaymentBody(
   input: CreateInvoicePaymentInput,
@@ -68,7 +76,7 @@ export function buildCreateInvoicePaymentBody(
     body.notes = input.notes;
   }
   if (input.send_thank_you === true) {
-    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env);
+    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env, input);
     body.send_thank_you = true;
   } else {
     body.send_thank_you = false;
@@ -96,11 +104,20 @@ export async function createInvoicePayment(
   input: CreateInvoicePaymentInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<unknown> {
-  return client.request({
+  const body = buildCreateInvoicePaymentBody(input, env);
+  const harvest = await client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/payments`,
-    body: buildCreateInvoicePaymentBody(input, env),
+    body,
   });
+  if (input.send_thank_you !== true) {
+    return harvest;
+  }
+  const goRef = readGoRef(input.go_ref);
+  if (goRef === undefined) {
+    throw new Error("go_ref missing after live-send assert");
+  }
+  return attachLiveSendAudit(harvest, goRef);
 }
 
 export async function deleteInvoicePayment(client: HarvestClient, invoiceId: number, paymentId: number): Promise<unknown> {

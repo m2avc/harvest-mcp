@@ -21434,7 +21434,7 @@ var StdioServerTransport = class {
 // ../../package.json
 var package_default = {
   name: "m2avc-harvest-mcp",
-  version: "0.2.0",
+  version: "0.3.1",
   private: true,
   description: "Marketplace plugin semver \u2014 single source of truth for harvest-rest User-Agent (m2avc-harvest-mcp/<semver> (mn@m2avc.com)). Keep plugin.json and servers/harvest-rest/package.json versions equal. Never put tokens here."
 };
@@ -21445,6 +21445,7 @@ var PACKAGE_VERSION = package_default.version;
 // src/env.ts
 var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 var DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
+var MIN_GO_REF_LENGTH = 8;
 var HarvestConfigError = class extends Error {
   constructor(message) {
     super(message);
@@ -21457,16 +21458,88 @@ var DangerousSendBlockedError = class extends Error {
     this.name = "DangerousSendBlockedError";
   }
 };
+var liveSendConfirmationFields = {
+  confirm_live_send: external_exports.boolean().optional().describe(
+    "Required true for email send (omit event_type), event_type=send, or send_thank_you. Per-call intent on top of DANGEROUS_SEND=1. Not sent to Harvest."
+  ),
+  go_ref: external_exports.string().optional().describe(
+    "Short quote or reference to Mike's explicit GO message (at least 8 characters after trim). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest."
+  )
+};
 function isDangerousSendEnabled(env = process.env) {
   return env.DANGEROUS_SEND === "1";
 }
-function assertDangerousSendAllowed(action, env = process.env) {
-  if (isDangerousSendEnabled(env)) {
-    return;
+function isSendLockoutEnabled(env = process.env) {
+  return env.HARVEST_SMOKE === "1" || env.NODE_ENV === "test" || env.HARVEST_SEND_LOCKOUT === "1";
+}
+function formatGoRefForMessage(goRef) {
+  if (goRef === void 0) {
+    return "(missing)";
   }
-  throw new DangerousSendBlockedError(
-    `${action} is blocked unless DANGEROUS_SEND=1 (default off) and Mike has GO'd a live send. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`
-  );
+  const trimmed = goRef.trim();
+  return trimmed.length === 0 ? "(empty)" : trimmed;
+}
+function readGoRef(goRef) {
+  if (goRef === void 0) {
+    return void 0;
+  }
+  const trimmed = goRef.trim();
+  return trimmed.length === 0 ? void 0 : trimmed;
+}
+function attachLiveSendAudit(harvest, goRef) {
+  return { harvest, go_ref: goRef };
+}
+function logLiveSendAudit(action, goRef, write = (line) => {
+  process.stderr.write(line);
+}) {
+  const oneLine = goRef.replace(/\s+/g, " ").trim();
+  write(`harvest-rest live send: action=${action} go_ref=${oneLine}
+`);
+}
+function blockedMessage(action, detail, goRef) {
+  return `${action} is blocked: ${detail} go_ref=${formatGoRefForMessage(goRef)}`;
+}
+function assertDangerousSendAllowed(action, env = process.env, confirmation = {}) {
+  const goRef = confirmation.go_ref;
+  if (isSendLockoutEnabled(env)) {
+    throw new DangerousSendBlockedError(
+      blockedMessage(
+        action,
+        "smoke/test/lockout mode (HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1) refuses gated sends even with DANGEROUS_SEND=1 and confirm_live_send=true. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.",
+        goRef
+      )
+    );
+  }
+  if (!isDangerousSendEnabled(env)) {
+    throw new DangerousSendBlockedError(
+      blockedMessage(
+        action,
+        "DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, at least 8 characters after trim) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.",
+        goRef
+      )
+    );
+  }
+  if (confirmation.confirm_live_send !== true) {
+    throw new DangerousSendBlockedError(
+      blockedMessage(
+        action,
+        "confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, at least 8 characters after trim). Do not email real client invoices or mark them sent in smoke tests.",
+        goRef
+      )
+    );
+  }
+  const trimmed = readGoRef(goRef);
+  if (trimmed === void 0 || trimmed.length < MIN_GO_REF_LENGTH) {
+    throw new DangerousSendBlockedError(
+      blockedMessage(
+        action,
+        `go_ref must be a non-empty string (short quote of Mike's explicit GO, at least ${MIN_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        goRef
+      )
+    );
+  }
+  logLiveSendAudit(action, trimmed);
+  return trimmed;
 }
 function readTrimmed(env, key) {
   const raw = env[key];
@@ -21827,13 +21900,30 @@ async function listContacts(client, input) {
   });
 }
 
+// src/tools/iso-date.ts
+function utcTodayIsoDate(nowMs = Date.now()) {
+  return new Date(nowMs).toISOString().slice(0, 10);
+}
+function isRealIsoDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    return false;
+  }
+  const year = Number(value.slice(0, 4));
+  const month = Number(value.slice(5, 7));
+  const day = Number(value.slice(8, 10));
+  const date3 = new Date(Date.UTC(year, month - 1, day));
+  return date3.getUTCFullYear() === year && date3.getUTCMonth() === month - 1 && date3.getUTCDate() === day;
+}
+var isoDateSchema = external_exports.string().refine(isRealIsoDate, "start_date must be a real YYYY-MM-DD calendar date").refine((value) => value <= utcTodayIsoDate(), "start_date must not be in the future");
+
 // src/tools/estimates.ts
 var estimateStateSchema = external_exports.enum(["draft", "sent", "accepted", "declined"]);
+var estimateCalendarDateSchema = external_exports.string().refine(isRealIsoDate, "must be a real YYYY-MM-DD calendar date");
 var listEstimatesInputSchema = external_exports.object({
   client_id: external_exports.coerce.number().int().positive().optional(),
-  updated_since: external_exports.string().optional(),
-  from: external_exports.string().optional(),
-  to: external_exports.string().optional(),
+  updated_since: external_exports.string().datetime({ offset: true }).optional(),
+  from: estimateCalendarDateSchema.optional(),
+  to: estimateCalendarDateSchema.optional(),
   state: estimateStateSchema.optional(),
   page: external_exports.coerce.number().int().positive().optional(),
   per_page: external_exports.coerce.number().int().min(1).max(2e3).optional()
@@ -21879,7 +21969,8 @@ var createInvoiceMessageInputSchema = external_exports.object({
   attach_pdf: external_exports.boolean().optional(),
   send_me_a_copy: external_exports.boolean().optional(),
   thank_you: external_exports.boolean().optional(),
-  include_link_to_client_invoice: external_exports.boolean().optional()
+  include_link_to_client_invoice: external_exports.boolean().optional(),
+  ...liveSendConfirmationFields
 }).strict();
 var listInvoiceMessagesInputSchema = external_exports.object({
   invoice_id: external_exports.coerce.number().int().positive(),
@@ -21969,15 +22060,16 @@ function isGatedInvoiceSend(input) {
   return input.event_type === void 0 || input.event_type === "send";
 }
 async function createInvoiceMessage(client, input, env = process.env) {
-  if (isGatedInvoiceSend(input)) {
-    const action = input.event_type === "send" ? "create_invoice_message event_type=send" : "create_invoice_message email send (omit event_type)";
-    assertDangerousSendAllowed(action, env);
-  }
-  return client.request({
+  const body = buildCreateInvoiceMessageBody(input);
+  const gated = isGatedInvoiceSend(input);
+  const action = input.event_type === "send" ? "create_invoice_message event_type=send" : "create_invoice_message email send (omit event_type)";
+  const goRef = gated ? assertDangerousSendAllowed(action, env, input) : void 0;
+  const harvest = await client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/messages`,
-    body: buildCreateInvoiceMessageBody(input)
+    body
   });
+  return goRef === void 0 ? harvest : attachLiveSendAudit(harvest, goRef);
 }
 async function previewInvoiceMessage(client, input) {
   return client.request({
@@ -22003,7 +22095,8 @@ var createInvoicePaymentFieldsSchema = external_exports.object({
   paid_at: external_exports.string().optional(),
   paid_date: external_exports.string().optional(),
   notes: external_exports.string().optional(),
-  send_thank_you: external_exports.boolean().optional()
+  send_thank_you: external_exports.boolean().optional(),
+  ...liveSendConfirmationFields
 }).strict();
 var createInvoicePaymentInputSchema = createInvoicePaymentFieldsSchema.superRefine((value, ctx) => {
   if (value.paid_at !== void 0 && value.paid_date !== void 0) {
@@ -22038,7 +22131,7 @@ function buildCreateInvoicePaymentBody(input, env = process.env) {
     body.notes = input.notes;
   }
   if (input.send_thank_you === true) {
-    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env);
+    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env, input);
     body.send_thank_you = true;
   } else {
     body.send_thank_you = false;
@@ -22057,11 +22150,20 @@ async function listInvoicePayments(client, input) {
   });
 }
 async function createInvoicePayment(client, input, env = process.env) {
-  return client.request({
+  const body = buildCreateInvoicePaymentBody(input, env);
+  const harvest = await client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/payments`,
-    body: buildCreateInvoicePaymentBody(input, env)
+    body
   });
+  if (input.send_thank_you !== true) {
+    return harvest;
+  }
+  const goRef = readGoRef(input.go_ref);
+  if (goRef === void 0) {
+    throw new Error("go_ref missing after live-send assert");
+  }
+  return attachLiveSendAudit(harvest, goRef);
 }
 async function deleteInvoicePayment(client, invoiceId, paymentId) {
   return client.request({
@@ -22071,7 +22173,6 @@ async function deleteInvoicePayment(client, invoiceId, paymentId) {
 }
 
 // src/tools/billable-rates.ts
-var isoDateSchema = external_exports.string().regex(/^\d{4}-\d{2}-\d{2}$/, "start_date must be YYYY-MM-DD");
 var listUserBillableRatesInputSchema = external_exports.object({
   user_id: external_exports.coerce.number().int().positive(),
   page: external_exports.coerce.number().int().positive().optional(),
@@ -22083,7 +22184,7 @@ var getUserBillableRateInputSchema = external_exports.object({
 }).strict();
 var createUserBillableRateInputSchema = external_exports.object({
   user_id: external_exports.coerce.number().int().positive(),
-  amount: external_exports.number(),
+  amount: external_exports.number().finite(),
   start_date: isoDateSchema.optional()
 }).strict();
 function buildCreateBillableRateBody(input) {
@@ -22117,22 +22218,6 @@ async function createUserBillableRate(client, input) {
   });
 }
 
-// src/tools/iso-date.ts
-function utcTodayIsoDate(nowMs = Date.now()) {
-  return new Date(nowMs).toISOString().slice(0, 10);
-}
-function isRealIsoDate(value) {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
-    return false;
-  }
-  const year = Number(value.slice(0, 4));
-  const month = Number(value.slice(5, 7));
-  const day = Number(value.slice(8, 10));
-  const date3 = new Date(Date.UTC(year, month - 1, day));
-  return date3.getUTCFullYear() === year && date3.getUTCMonth() === month - 1 && date3.getUTCDate() === day;
-}
-var isoDateSchema2 = external_exports.string().refine(isRealIsoDate, "start_date must be a real YYYY-MM-DD calendar date").refine((value) => value <= utcTodayIsoDate(), "start_date must not be in the future");
-
 // src/tools/cost-rates.ts
 var listUserCostRatesInputSchema = external_exports.object({
   user_id: external_exports.coerce.number().int().positive(),
@@ -22145,8 +22230,8 @@ var getUserCostRateInputSchema = external_exports.object({
 }).strict();
 var createUserCostRateInputSchema = external_exports.object({
   user_id: external_exports.coerce.number().int().positive(),
-  amount: external_exports.number(),
-  start_date: isoDateSchema2.optional(),
+  amount: external_exports.number().finite(),
+  start_date: isoDateSchema.optional(),
   confirm_replacement: external_exports.literal(true).optional()
 }).strict();
 function buildCreateCostRateBody(input) {
@@ -22180,7 +22265,7 @@ function isCostRateReplacement(startDate, existingStartDates) {
   if (startDate === void 0) {
     return true;
   }
-  return existingStartDates.some((existing) => startDate < existing);
+  return existingStartDates.some((existing) => startDate <= existing);
 }
 function assertCostRateReplacementAcknowledged(input, existingStartDates) {
   if (!isCostRateReplacement(input.start_date, existingStartDates)) {
@@ -22190,7 +22275,7 @@ function assertCostRateReplacementAcknowledged(input, existingStartDates) {
     return;
   }
   throw new HarvestConfigError(
-    "create_user_cost_rate would replace existing rate(s). Pass confirm_replacement=true after explicit user confirmation. Omitting start_date replaces all rates; a start_date earlier than an existing rate backdates over it."
+    "create_user_cost_rate would replace existing rate(s). Pass confirm_replacement=true after explicit user confirmation. Omitting start_date replaces all rates; a start_date earlier than or equal to an existing rate replaces it."
   );
 }
 async function listUserCostRates(client, input) {
@@ -22487,7 +22572,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_message",
     {
       title: "Create invoice message",
-      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send are blocked unless DANGEROUS_SEND=1 (Mike GO). Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
+      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send require DANGEROUS_SEND=1 (master switch, default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after trim). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated sends. close/draft/re-open are not gated. Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema
     },
     async (args, extra) => runTool(() => createInvoiceMessage(toolClient(client, extra), args))
@@ -22523,7 +22608,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_payment",
     {
       title: "Create invoice payment",
-      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1 and send_thank_you=true (Harvest's default thank-you email is not inherited).",
+      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1, send_thank_you=true, confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after trim). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated thank-you email. Harvest's default thank-you email is not inherited.",
       inputSchema: createInvoicePaymentFieldsSchema
     },
     async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), createInvoicePaymentInputSchema.parse(args)))
@@ -22577,7 +22662,7 @@ function registerHarvestRestTools(server, client) {
     "list_user_cost_rates",
     {
       title: "List user cost rates",
-      description: "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Requires Administrator permission (not Manager) to edit cost rates.",
+      description: "GET /v2/users/{USER_ID}/cost_rates. Lists a user's cost rates (oldest start_date first). Official remote MCP does not expose this. Administrator only (not Manager).",
       inputSchema: listUserCostRatesInputSchema
     },
     async (args, extra) => runTool(() => listUserCostRates(toolClient(client, extra), args))
@@ -22586,7 +22671,7 @@ function registerHarvestRestTools(server, client) {
     "get_user_cost_rate",
     {
       title: "Get user cost rate",
-      description: "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this.",
+      description: "GET /v2/users/{USER_ID}/cost_rates/{COST_RATE_ID}. Harvest API v2 supports retrieve. Official remote MCP does not expose this. Administrator only (not Manager).",
       inputSchema: getUserCostRateInputSchema
     },
     async (args, extra) => runTool(() => getUserCostRate(toolClient(client, extra), args))
@@ -22595,7 +22680,7 @@ function registerHarvestRestTools(server, client) {
     "create_user_cost_rate",
     {
       title: "Create user cost rate",
-      description: "POST /v2/users/{USER_ID}/cost_rates. Administrator only (not Manager). amount is required; start_date is optional (real YYYY-MM-DD, not in the future). Omitting start_date or using a start_date earlier than an existing rate replaces rate history \u2014 requires confirm_replacement=true after explicit user confirmation.",
+      description: "POST /v2/users/{USER_ID}/cost_rates. Administrator only (not Manager). amount is required; start_date is optional (real YYYY-MM-DD, not in the future). Omitting start_date or using a start_date earlier than or equal to an existing rate replaces rate history \u2014 requires confirm_replacement=true after explicit user confirmation.",
       inputSchema: createUserCostRateInputSchema
     },
     async (args, extra) => runTool(() => createUserCostRate(toolClient(client, extra), args))
@@ -22634,7 +22719,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/estimates. Official remote MCP has no estimates tools. Filter with client_id, state (draft|sent|accepted|declined), from, to, updated_since. Read-only.",
       inputSchema: listEstimatesInputSchema
     },
-    async (args) => runTool(() => listEstimates(client, args))
+    async (args, extra) => runTool(() => listEstimates(toolClient(client, extra), args))
   );
   server.registerTool(
     "get_estimate",
@@ -22643,7 +22728,7 @@ function registerHarvestRestTools(server, client) {
       description: "GET /v2/estimates/{ESTIMATE_ID}. Returns the estimate including line_items and client_key (public client URL). Does not send or accept the estimate.",
       inputSchema: getEstimateInputSchema
     },
-    async (args) => runTool(() => getEstimate(client, args))
+    async (args, extra) => runTool(() => getEstimate(toolClient(client, extra), args))
   );
   server.registerTool(
     "update_project_user_assignment",

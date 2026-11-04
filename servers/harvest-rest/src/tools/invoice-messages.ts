@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { assertDangerousSendAllowed } from "../env.js";
+import {
+  assertDangerousSendAllowed,
+  attachLiveSendAudit,
+  liveSendConfirmationFields,
+} from "../env.js";
 import type { HarvestClient } from "../harvest-client.js";
 
 export const invoiceMessageEventTypes = ["send", "close", "draft", "re-open"] as const;
@@ -26,6 +30,7 @@ export const createInvoiceMessageInputSchema = z
     send_me_a_copy: z.boolean().optional(),
     thank_you: z.boolean().optional(),
     include_link_to_client_invoice: z.boolean().optional(),
+    ...liveSendConfirmationFields,
   })
   .strict();
 
@@ -141,18 +146,19 @@ export async function createInvoiceMessage(
   input: CreateInvoiceMessageInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<unknown> {
-  if (isGatedInvoiceSend(input)) {
-    const action =
-      input.event_type === "send"
-        ? "create_invoice_message event_type=send"
-        : "create_invoice_message email send (omit event_type)";
-    assertDangerousSendAllowed(action, env);
-  }
-  return client.request({
+  const body = buildCreateInvoiceMessageBody(input);
+  const gated = isGatedInvoiceSend(input);
+  const action =
+    input.event_type === "send"
+      ? "create_invoice_message event_type=send"
+      : "create_invoice_message email send (omit event_type)";
+  const goRef = gated ? assertDangerousSendAllowed(action, env, input) : undefined;
+  const harvest = await client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/messages`,
-    body: buildCreateInvoiceMessageBody(input),
+    body,
   });
+  return goRef === undefined ? harvest : attachLiveSendAudit(harvest, goRef);
 }
 
 export async function previewInvoiceMessage(

@@ -12,8 +12,11 @@ import { deleteInvoice, updateInvoice } from "../src/tools/invoices.js";
  *
  * ONLY: update a throwaway draft + payment notes round-trip.
  * NEVER: create_invoice_message email send, event_type=send, or send_thank_you.
- * Those paths stay unit/mocked or require DANGEROUS_SEND=1 + Mike GO.
+ * Those paths stay unit/mocked or require DANGEROUS_SEND=1 + Mike GO
+ * + confirm_live_send + go_ref. HARVEST_SMOKE=1 lockout stays on for this file.
  */
+process.env.HARVEST_SMOKE = "1";
+
 describe("HARVEST_E2E_INVOICE_ID", () => {
   it("must parse to a positive integer", () => {
     assert.equal(parseE2eInvoiceId("42"), 42);

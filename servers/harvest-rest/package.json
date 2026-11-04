@@ -1,6 +1,6 @@
 {
   "name": "@m2avc/harvest-rest-mcp",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "private": true,
   "description": "Custom stdio MCP server for Harvest API v2 invoice update/delete, messages, payments, user billable/cost rates, invoice item categories, and project assignment rates. Single REST entrypoint.",
   "type": "module",
@@ -12,7 +12,7 @@
     "build": "esbuild src/index.ts --bundle --platform=node --format=esm --outfile=dist/index.js --banner:js=\"#!/usr/bin/env node\"",
     "start": "node dist/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "node --import tsx --test test/*.test.ts"
+    "test": "HARVEST_SMOKE=1 node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.30.0",
