@@ -21447,6 +21447,7 @@ var DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc
 var DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 var MIN_GO_REF_LENGTH = 8;
 var MAX_GO_REF_LENGTH = 500;
+var GO_REF_LENGTH_HINT = `${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after collapsing control characters and whitespace`;
 var GO_REF_TRUNCATION_MARKER = "\u2026[truncated]";
 var GO_REF_UNSAFE_RUN = /[\u0000-\u001F\u007F\s]+/g;
 var HarvestConfigError = class extends Error {
@@ -21469,7 +21470,7 @@ var liveSendConfirmationFields = {
     MAX_GO_REF_LENGTH,
     `go_ref must be at most ${MAX_GO_REF_LENGTH} characters`
   ).optional().describe(
-    `Short quote or reference to Mike's explicit GO message (${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest.`
+    `Short quote or reference to Mike's explicit GO message (${GO_REF_LENGTH_HINT}). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest.`
   )
 };
 function isDangerousSendEnabled(env = process.env) {
@@ -21529,7 +21530,7 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`,
+        `DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, ${GO_REF_LENGTH_HINT}) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`,
         goRef
       )
     );
@@ -21538,26 +21539,27 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        `confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, ${GO_REF_LENGTH_HINT}). Do not email real client invoices or mark them sent in smoke tests.`,
         goRef
       )
     );
   }
   const trimmed = readGoRef(goRef);
-  if (trimmed === void 0 || trimmed.length < MIN_GO_REF_LENGTH) {
+  const sanitized = trimmed === void 0 ? "" : sanitizeGoRefForOutput(trimmed);
+  if (trimmed === void 0 || sanitized.length < MIN_GO_REF_LENGTH) {
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `go_ref must be a non-empty string (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}\u2013${MAX_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        `go_ref must be a non-empty string (short quote of Mike's explicit GO, ${GO_REF_LENGTH_HINT}). Do not email real client invoices or mark them sent in smoke tests.`,
         goRef
       )
     );
   }
-  if (trimmed.length > MAX_GO_REF_LENGTH) {
+  if (trimmed.length > MAX_GO_REF_LENGTH || sanitized.length > MAX_GO_REF_LENGTH) {
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `go_ref must be at most ${MAX_GO_REF_LENGTH} characters after trim. Do not email real client invoices or mark them sent in smoke tests.`,
+        `go_ref must be at most ${MAX_GO_REF_LENGTH} characters after collapsing control characters and whitespace. Do not email real client invoices or mark them sent in smoke tests.`,
         goRef
       )
     );
@@ -22596,7 +22598,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_message",
     {
       title: "Create invoice message",
-      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send require DANGEROUS_SEND=1 (master switch, default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after trim). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated sends. close/draft/re-open are not gated. Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
+      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send require DANGEROUS_SEND=1 (master switch, default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after collapsing control characters and whitespace). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated sends. close/draft/re-open are not gated. Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema
     },
     async (args, extra) => runTool(() => createInvoiceMessage(toolClient(client, extra), args))
@@ -22632,7 +22634,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_payment",
     {
       title: "Create invoice payment",
-      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1, send_thank_you=true, confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after trim). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated thank-you email. Harvest's default thank-you email is not inherited.",
+      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1, send_thank_you=true, confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after collapsing control characters and whitespace). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated thank-you email. Harvest's default thank-you email is not inherited.",
       inputSchema: createInvoicePaymentFieldsSchema
     },
     async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), createInvoicePaymentInputSchema.parse(args)))

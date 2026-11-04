@@ -102,6 +102,28 @@ describe("assertDangerousSendAllowed per-call lock", () => {
     }
   });
 
+  it("blocks go_ref that is long enough after trim but sanitizes below the minimum", () => {
+    const onlyControls = "\u0001".repeat(MIN_GO_REF_LENGTH);
+    const mixBelowMin = " \u0001\u0001hello\u0007 ";
+    for (const go_ref of [onlyControls, mixBelowMin]) {
+      assert.throws(
+        () => assertDangerousSendAllowed("test-action", allowEnv, { confirm_live_send: true, go_ref }),
+        (error: unknown) => {
+          assert.ok(error instanceof DangerousSendBlockedError);
+          assert.match(error.message, /go_ref/);
+          assert.match(error.message, new RegExp(String(MIN_GO_REF_LENGTH)));
+          return true;
+        },
+      );
+    }
+
+    const captured = captureStderr(() =>
+      assertDangerousSendAllowed("test-action", allowEnv, liveConfirm),
+    ) as { lines: string[]; result: unknown };
+    assert.equal(captured.result, GO_REF);
+    assert.match(captured.lines.join(""), new RegExp(`go_ref=${GO_REF}`));
+  });
+
   it("blocks in smoke, test, and HARVEST_SEND_LOCKOUT even with env + confirm", () => {
     const lockouts = [
       { ...allowEnv, HARVEST_SMOKE: "1" },

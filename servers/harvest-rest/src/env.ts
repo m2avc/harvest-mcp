@@ -12,11 +12,14 @@ import { PACKAGE_VERSION } from "./version.js";
 export const DEFAULT_HARVEST_USER_AGENT = `m2avc-harvest-mcp/${PACKAGE_VERSION} (mn@m2avc.com)`;
 export const DEFAULT_HARVEST_API_BASE = "https://api.harvestapp.com/v2";
 
-/** Minimum trimmed length of `go_ref` (short quote of Mike's explicit GO). */
+/** Minimum length of `go_ref` after collapsing C0 / DEL / whitespace (matches audit). */
 export const MIN_GO_REF_LENGTH = 8;
 
 /** Maximum length of `go_ref`. LLM-supplied; reject oversized quotes. */
 export const MAX_GO_REF_LENGTH = 500;
+
+/** User-facing length rule; matches `sanitizeGoRefForOutput` then the min/max checks. */
+const GO_REF_LENGTH_HINT = `${MIN_GO_REF_LENGTH}–${MAX_GO_REF_LENGTH} characters after collapsing control characters and whitespace`;
 
 /** Appended when an echoed / blocked `go_ref` is truncated to `MAX_GO_REF_LENGTH`. */
 export const GO_REF_TRUNCATION_MARKER = "…[truncated]";
@@ -70,7 +73,7 @@ export const liveSendConfirmationFields = {
     )
     .optional()
     .describe(
-      `Short quote or reference to Mike's explicit GO message (${MIN_GO_REF_LENGTH}–${MAX_GO_REF_LENGTH} characters after trim). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest.`,
+      `Short quote or reference to Mike's explicit GO message (${GO_REF_LENGTH_HINT}). Required for gated live sends. Included in tool text and a stderr audit line. Not sent to Harvest.`,
     ),
 };
 
@@ -136,8 +139,9 @@ function blockedMessage(action: string, detail: string, goRef: string | undefine
 
 /**
  * Master switch is still DANGEROUS_SEND=1 (default off). Gated live sends also
- * require confirm_live_send=true and a non-empty go_ref (8–500 chars after trim).
- * Smoke / test / HARVEST_SEND_LOCKOUT always refuse. Returns the trimmed go_ref.
+ * require confirm_live_send=true and a non-empty go_ref (8–500 chars after
+ * collapsing control characters and whitespace). Smoke / test /
+ * HARVEST_SEND_LOCKOUT always refuse. Returns the trimmed go_ref.
  */
 export function assertDangerousSendAllowed(
   action: string,
@@ -160,7 +164,7 @@ export function assertDangerousSendAllowed(
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}–${MAX_GO_REF_LENGTH} characters after trim) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`,
+        `DANGEROUS_SEND=1 (default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, ${GO_REF_LENGTH_HINT}) are required. Do not email real client invoices or mark them sent in smoke tests. Use a throwaway draft + create_invoice_payment notes round-trip instead.`,
         goRef,
       ),
     );
@@ -170,27 +174,28 @@ export function assertDangerousSendAllowed(
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}–${MAX_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        `confirm_live_send=true is required (per-call intent on top of DANGEROUS_SEND=1), plus a non-empty go_ref (short quote of Mike's explicit GO, ${GO_REF_LENGTH_HINT}). Do not email real client invoices or mark them sent in smoke tests.`,
         goRef,
       ),
     );
   }
 
   const trimmed = readGoRef(goRef);
-  if (trimmed === undefined || trimmed.length < MIN_GO_REF_LENGTH) {
+  const sanitized = trimmed === undefined ? "" : sanitizeGoRefForOutput(trimmed);
+  if (trimmed === undefined || sanitized.length < MIN_GO_REF_LENGTH) {
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `go_ref must be a non-empty string (short quote of Mike's explicit GO, ${MIN_GO_REF_LENGTH}–${MAX_GO_REF_LENGTH} characters after trim). Do not email real client invoices or mark them sent in smoke tests.`,
+        `go_ref must be a non-empty string (short quote of Mike's explicit GO, ${GO_REF_LENGTH_HINT}). Do not email real client invoices or mark them sent in smoke tests.`,
         goRef,
       ),
     );
   }
-  if (trimmed.length > MAX_GO_REF_LENGTH) {
+  if (trimmed.length > MAX_GO_REF_LENGTH || sanitized.length > MAX_GO_REF_LENGTH) {
     throw new DangerousSendBlockedError(
       blockedMessage(
         action,
-        `go_ref must be at most ${MAX_GO_REF_LENGTH} characters after trim. Do not email real client invoices or mark them sent in smoke tests.`,
+        `go_ref must be at most ${MAX_GO_REF_LENGTH} characters after collapsing control characters and whitespace. Do not email real client invoices or mark them sent in smoke tests.`,
         goRef,
       ),
     );
