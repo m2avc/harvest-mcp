@@ -3,7 +3,6 @@ import { describe, it } from "node:test";
 
 import {
   assertDangerousSendAllowed,
-  attachLiveSendAudit,
   DangerousSendBlockedError,
   GO_REF_TRUNCATION_MARKER,
   logLiveSendAudit,
@@ -134,7 +133,7 @@ describe("assertDangerousSendAllowed per-call lock", () => {
     const captured = captureStderr(() =>
       assertDangerousSendAllowed("test-action", allowEnv, { confirm_live_send: true, go_ref }),
     ) as { lines: string[]; result: unknown };
-    assert.equal(captured.result, go_ref);
+    assert.equal(captured.result, "ab cdefg");
     assert.match(captured.lines.join(""), /go_ref=ab cdefg/);
   });
 
@@ -202,6 +201,16 @@ describe("assertDangerousSendAllowed per-call lock", () => {
   });
 
   it("rejects over-max sanitized go_ref in assertDangerousSendAllowed", () => {
+    const atMax = "x".repeat(MAX_GO_REF_LENGTH);
+    const captured = captureStderr(() =>
+      assertDangerousSendAllowed("test-action", allowEnv, {
+        confirm_live_send: true,
+        go_ref: atMax,
+      }),
+    ) as { lines: string[]; result: unknown };
+    assert.equal(captured.result, atMax);
+    assert.equal((captured.result as string).length, MAX_GO_REF_LENGTH);
+
     const overMax = "x".repeat(MAX_GO_REF_LENGTH + 1);
     assert.throws(
       () =>
@@ -230,7 +239,8 @@ describe("assertDangerousSendAllowed per-call lock", () => {
         go_ref: accepted,
       }),
     ) as { lines: string[]; result: unknown };
-    assert.equal(captured.result, accepted);
+    assert.equal(captured.result, sanitizeGoRefForOutput(accepted));
+    assert.equal((captured.result as string).length, MAX_GO_REF_LENGTH);
     assert.match(captured.lines.join(""), new RegExp(`go_ref=${sanitizeGoRefForOutput(accepted)}`));
 
     const rejected = `${"a".repeat(250)}${"\u0001".repeat(10)}${"b".repeat(250)}`;
@@ -365,7 +375,7 @@ describe("create_invoice_message live-send lock", () => {
       ...liveConfirm,
     });
     const captured = await captureStderr(() => createInvoiceMessage(client, input, allowEnv));
-    assert.deepEqual(captured.result, attachLiveSendAudit({ id: 27835325, event_type: "send" }, GO_REF));
+    assert.deepEqual(captured.result, { id: 27835325, event_type: "send", go_ref: GO_REF });
     assert.equal(requests.length, 1);
     assert.deepEqual(requests[0]?.bodyJson, { event_type: "send" });
     assert.equal(Object.hasOwn(requests[0]?.bodyJson as object, "go_ref"), false);
@@ -386,12 +396,34 @@ describe("create_invoice_message live-send lock", () => {
     });
     const result = await createInvoiceMessage(client, input, allowEnv);
     assert.deepEqual(result, {
-      harvest: { id: 27835324, event_type: null, subject: "Invoice #1001" },
+      id: 27835324,
+      event_type: null,
+      subject: "Invoice #1001",
       go_ref: GO_REF,
     });
     assert.deepEqual(requests[0]?.bodyJson, {
       recipients: [{ name: "Richard Roe", email: "richard@example.com" }],
       subject: "Invoice #1001",
+    });
+    assert.equal(Object.hasOwn(requests[0]?.bodyJson as object, "go_ref"), false);
+  });
+
+  it("returns Harvest message fields at the top level with the sanitized go_ref", async () => {
+    const go_ref = "ab\u0001\u0002cdefg";
+    const { client, requests } = createMockClient({
+      responseBody: { id: 27835325, event_type: "send" },
+    });
+    const input = createInvoiceMessageInputSchema.parse({
+      invoice_id: 13150403,
+      event_type: "send",
+      confirm_live_send: true,
+      go_ref,
+    });
+    const result = await createInvoiceMessage(client, input, allowEnv);
+    assert.deepEqual(result, {
+      id: 27835325,
+      event_type: "send",
+      go_ref: "ab cdefg",
     });
     assert.equal(Object.hasOwn(requests[0]?.bodyJson as object, "go_ref"), false);
   });
@@ -489,7 +521,9 @@ describe("create_invoice_payment thank-you live-send lock", () => {
     });
     const captured = await captureStderr(() => createInvoicePayment(client, input, allowEnv));
     assert.deepEqual(captured.result, {
-      harvest: { id: 10336386, amount: 10, send_thank_you: true },
+      id: 10336386,
+      amount: 10,
+      send_thank_you: true,
       go_ref: GO_REF,
     });
     assert.deepEqual(requests[0]?.bodyJson, { amount: 10, send_thank_you: true });
@@ -497,6 +531,28 @@ describe("create_invoice_payment thank-you live-send lock", () => {
     assert.equal(Object.hasOwn(requests[0]?.bodyJson as object, "confirm_live_send"), false);
     assert.match(captured.lines.join(""), /create_invoice_payment send_thank_you=true/);
     assert.doesNotMatch(captured.lines.join(""), /test-token/);
+  });
+
+  it("returns Harvest payment fields at the top level with the sanitized go_ref", async () => {
+    const go_ref = "ab\u0001\u0002cdefg";
+    const { client, requests } = createMockClient({
+      responseBody: { id: 10336386, amount: 10, send_thank_you: true },
+    });
+    const input = createInvoicePaymentInputSchema.parse({
+      invoice_id: 13150378,
+      amount: 10,
+      send_thank_you: true,
+      confirm_live_send: true,
+      go_ref,
+    });
+    const result = await createInvoicePayment(client, input, allowEnv);
+    assert.deepEqual(result, {
+      id: 10336386,
+      amount: 10,
+      send_thank_you: true,
+      go_ref: "ab cdefg",
+    });
+    assert.equal(Object.hasOwn(requests[0]?.bodyJson as object, "go_ref"), false);
   });
 
   it("does not require confirm when send_thank_you is not true", () => {

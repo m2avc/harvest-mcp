@@ -45,7 +45,8 @@ describe("create_invoice_message", () => {
     const result = await createInvoiceMessage(client, input, allowSend);
 
     assert.deepEqual(result, {
-      harvest: { id: 27835325, event_type: "send" },
+      id: 27835325,
+      event_type: "send",
       go_ref: liveConfirm.go_ref,
     });
     assert.equal(requests[0]?.method, "POST");

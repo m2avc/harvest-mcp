@@ -47,8 +47,8 @@ export type LiveSendConfirmation = {
   go_ref?: string;
 };
 
-export type LiveSendAuditResult<T = unknown> = {
-  harvest: T;
+/** Harvest payload fields stay at the top level; `go_ref` is the audit field. */
+export type LiveSendAuditResult<T = unknown> = T & {
   go_ref: string;
 };
 
@@ -127,7 +127,10 @@ export function readGoRef(goRef: string | undefined): string | undefined {
 }
 
 export function attachLiveSendAudit<T>(harvest: T, goRef: string): LiveSendAuditResult<T> {
-  return { harvest, go_ref: goRef };
+  if (harvest !== null && typeof harvest === "object") {
+    return { ...harvest, go_ref: goRef };
+  }
+  return { go_ref: goRef } as LiveSendAuditResult<T>;
 }
 
 export function logLiveSendAudit(
@@ -149,7 +152,8 @@ function blockedMessage(action: string, detail: string, goRef: string | undefine
  * Master switch is still DANGEROUS_SEND=1 (default off). Gated live sends also
  * require confirm_live_send=true and a non-empty go_ref (8–500 chars after
  * collapsing control characters and whitespace). Smoke / test /
- * HARVEST_SEND_LOCKOUT always refuse. Returns the trimmed go_ref.
+ * HARVEST_SEND_LOCKOUT always refuse. Returns the sanitized go_ref
+ * (C0 / DEL / whitespace collapsed, 8–500 characters).
  */
 export function assertDangerousSendAllowed(
   action: string,
@@ -209,8 +213,8 @@ export function assertDangerousSendAllowed(
     );
   }
 
-  logLiveSendAudit(action, trimmed);
-  return trimmed;
+  logLiveSendAudit(action, sanitized);
+  return sanitized;
 }
 
 function readTrimmed(env: NodeJS.ProcessEnv, key: string): string | undefined {

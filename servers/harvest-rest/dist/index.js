@@ -21504,7 +21504,10 @@ function readGoRef(goRef) {
   return trimmed.length === 0 ? void 0 : trimmed;
 }
 function attachLiveSendAudit(harvest, goRef) {
-  return { harvest, go_ref: goRef };
+  if (harvest !== null && typeof harvest === "object") {
+    return { ...harvest, go_ref: goRef };
+  }
+  return { go_ref: goRef };
 }
 function logLiveSendAudit(action, goRef, write = (line) => {
   process.stderr.write(line);
@@ -21565,8 +21568,8 @@ function assertDangerousSendAllowed(action, env = process.env, confirmation = {}
       )
     );
   }
-  logLiveSendAudit(action, trimmed);
-  return trimmed;
+  logLiveSendAudit(action, sanitized);
+  return sanitized;
 }
 function readTrimmed(env, key) {
   const raw = env[key];
@@ -22144,7 +22147,7 @@ var deleteInvoicePaymentInputSchema = external_exports.object({
   payment_id: external_exports.coerce.number().int().positive(),
   confirm: external_exports.literal(true)
 }).strict();
-function buildCreateInvoicePaymentBody(input, env = process.env) {
+function prepareCreateInvoicePayment(input, env) {
   const body = {
     amount: input.amount
   };
@@ -22158,12 +22161,12 @@ function buildCreateInvoicePaymentBody(input, env = process.env) {
     body.notes = input.notes;
   }
   if (input.send_thank_you === true) {
-    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env, input);
+    const goRef = assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env, input);
     body.send_thank_you = true;
-  } else {
-    body.send_thank_you = false;
+    return { body, goRef };
   }
-  return body;
+  body.send_thank_you = false;
+  return { body, goRef: void 0 };
 }
 async function listInvoicePayments(client, input) {
   return client.request({
@@ -22177,20 +22180,13 @@ async function listInvoicePayments(client, input) {
   });
 }
 async function createInvoicePayment(client, input, env = process.env) {
-  const body = buildCreateInvoicePaymentBody(input, env);
+  const { body, goRef } = prepareCreateInvoicePayment(input, env);
   const harvest = await client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/payments`,
     body
   });
-  if (input.send_thank_you !== true) {
-    return harvest;
-  }
-  const goRef = readGoRef(input.go_ref);
-  if (goRef === void 0) {
-    throw new Error("go_ref missing after live-send assert");
-  }
-  return attachLiveSendAudit(harvest, goRef);
+  return goRef === void 0 ? harvest : attachLiveSendAudit(harvest, goRef);
 }
 async function deleteInvoicePayment(client, invoiceId, paymentId) {
   return client.request({
@@ -22599,7 +22595,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_message",
     {
       title: "Create invoice message",
-      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send require DANGEROUS_SEND=1 (master switch, default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after collapsing control characters and whitespace). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated sends. close/draft/re-open are not gated. Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
+      description: "POST /v2/invoices/{INVOICE_ID}/messages. Omit event_type to email the invoice (requires recipients and/or send_me_a_copy=true). event_type=send marks a draft as sent without emailing. event_type=close writes off an open invoice. event_type=draft marks an open invoice as draft. event_type=re-open reopens a closed invoice. Email send and event_type=send require DANGEROUS_SEND=1 (master switch, default off), confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after collapsing control characters and whitespace). go_ref is audit-only and is not sent to Harvest. Successful gated sends return Harvest InvoiceMessage fields at the top level plus the sanitized go_ref. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated sends. close/draft/re-open are not gated. Smoke tests must not use the send path. Do not claim the invoice was sent unless this tool succeeds.",
       inputSchema: createInvoiceMessageInputSchema
     },
     async (args, extra) => runTool(() => createInvoiceMessage(toolClient(client, extra), args))
@@ -22635,7 +22631,7 @@ function registerHarvestRestTools(server, client) {
     "create_invoice_payment",
     {
       title: "Create invoice payment",
-      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1, send_thank_you=true, confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after collapsing control characters and whitespace). go_ref is audit-only and is not sent to Harvest. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated thank-you email. Harvest's default thank-you email is not inherited.",
+      description: "POST /v2/invoices/{INVOICE_ID}/payments. Records a payment. notes are sent character-for-character (do not rewrite). Pass either paid_at or paid_date, not both. amount must be finite and > 0. send_thank_you is forced false unless DANGEROUS_SEND=1, send_thank_you=true, confirm_live_send=true, and a non-empty go_ref (short quote of Mike's explicit GO, \u22658 chars after collapsing control characters and whitespace). go_ref is audit-only and is not sent to Harvest. Successful thank-you sends return Harvest InvoicePayment fields at the top level plus the sanitized go_ref. HARVEST_SMOKE=1, NODE_ENV=test, or HARVEST_SEND_LOCKOUT=1 always refuse gated thank-you email. Harvest's default thank-you email is not inherited.",
       inputSchema: createInvoicePaymentFieldsSchema
     },
     async (args, extra) => runTool(() => createInvoicePayment(toolClient(client, extra), createInvoicePaymentInputSchema.parse(args)))

@@ -4,7 +4,6 @@ import {
   assertDangerousSendAllowed,
   attachLiveSendAudit,
   liveSendConfirmationFields,
-  readGoRef,
 } from "../env.js";
 import type { HarvestClient } from "../harvest-client.js";
 
@@ -59,10 +58,10 @@ export type CreateInvoicePaymentInput = z.infer<typeof createInvoicePaymentInput
  * Harvest's default thank-you email on full payment. confirm_live_send / go_ref
  * are never copied into the Harvest body.
  */
-export function buildCreateInvoicePaymentBody(
+function prepareCreateInvoicePayment(
   input: CreateInvoicePaymentInput,
-  env: NodeJS.ProcessEnv = process.env,
-): Record<string, unknown> {
+  env: NodeJS.ProcessEnv,
+): { body: Record<string, unknown>; goRef: string | undefined } {
   const body: Record<string, unknown> = {
     amount: input.amount,
   };
@@ -76,12 +75,19 @@ export function buildCreateInvoicePaymentBody(
     body.notes = input.notes;
   }
   if (input.send_thank_you === true) {
-    assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env, input);
+    const goRef = assertDangerousSendAllowed("create_invoice_payment send_thank_you=true", env, input);
     body.send_thank_you = true;
-  } else {
-    body.send_thank_you = false;
+    return { body, goRef };
   }
-  return body;
+  body.send_thank_you = false;
+  return { body, goRef: undefined };
+}
+
+export function buildCreateInvoicePaymentBody(
+  input: CreateInvoicePaymentInput,
+  env: NodeJS.ProcessEnv = process.env,
+): Record<string, unknown> {
+  return prepareCreateInvoicePayment(input, env).body;
 }
 
 export async function listInvoicePayments(
@@ -104,20 +110,13 @@ export async function createInvoicePayment(
   input: CreateInvoicePaymentInput,
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<unknown> {
-  const body = buildCreateInvoicePaymentBody(input, env);
+  const { body, goRef } = prepareCreateInvoicePayment(input, env);
   const harvest = await client.request({
     method: "POST",
     path: `/invoices/${input.invoice_id}/payments`,
     body,
   });
-  if (input.send_thank_you !== true) {
-    return harvest;
-  }
-  const goRef = readGoRef(input.go_ref);
-  if (goRef === undefined) {
-    throw new Error("go_ref missing after live-send assert");
-  }
-  return attachLiveSendAudit(harvest, goRef);
+  return goRef === undefined ? harvest : attachLiveSendAudit(harvest, goRef);
 }
 
 export async function deleteInvoicePayment(client: HarvestClient, invoiceId: number, paymentId: number): Promise<unknown> {
